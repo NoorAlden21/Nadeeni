@@ -24,6 +24,7 @@ class UserResource extends JsonResource
                 'name' => $this->restaurant->name,
                 'slug' => $this->restaurant->slug,
                 'preferred_qr_mode' => $this->restaurant->preferred_qr_mode->value,
+                'timezone' => $this->restaurant->timezone,
             ],
         ];
     }
