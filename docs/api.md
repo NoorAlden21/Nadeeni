@@ -1,6 +1,6 @@
 # Nadeeni API
 
-Share this file with the frontend. It describes the routes that exist today. Web Push is not in this API yet.
+Share this file with the frontend. It describes the routes that exist today. The service worker that shows the notification lives in the Next.js repo.
 
 ## Base URL
 
@@ -226,7 +226,7 @@ The first call moves `waiting` to `ready` and sets `ready_at`. `200` is the [Ord
 
 A second call, while the order is already `ready`, is also `200`. `already_notified` is `true`. `ready_at` does not change.
 
-Web Push is not sent yet. `ready` means the cashier asked to notify. It does not mean the customer's phone received anything.
+The first call also asks the push service to deliver to this order's subscriptions. `ready` means the cashier asked to notify. It does not mean the customer's phone received anything. Say the request was sent. Do not say the customer got it.
 
 Any other status is `409` and `{ "message": "invalid_status" }`.
 
@@ -238,7 +238,7 @@ Other statuses are `409` and `{ "message": "invalid_status" }`.
 
 More than 5 resends per minute for the same cashier and order returns `429` and `{ "message": "Too Many Attempts." }`.
 
-Web Push is not sent yet.
+Resend asks the push service to deliver again. It does not mean the customer's phone received anything.
 
 ### `POST /orders/{order}/collect`
 
@@ -332,6 +332,72 @@ An unknown or revoked token is `404` and `{ "message": "Not found." }`.
 
 More than 30 requests per minute for the same token returns `429` and `{ "message": "Too Many Attempts." }`. The limit is per token, so customers on one shared network can poll together.
 
+### `POST /public/orders/{token}/push-subscriptions`
+
+No bearer token. `{token}` is the status-page token. The order must still be `waiting` or `ready`, and the token must not be revoked or past `expires_at`. Otherwise `404` and `{ "message": "Not found." }`.
+
+Send the browser subscription. `expirationTime` is the browser value: milliseconds since Unix epoch, or `null`.
+
+```json
+{
+  "endpoint": "https://fcm.googleapis.com/fcm/send/example",
+  "expirationTime": null,
+  "keys": {
+    "p256dh": "browser-public-key",
+    "auth": "browser-auth-secret"
+  }
+}
+```
+
+`content_encoding` is optional. `aes128gcm` or `aesgcm`. The default is `aes128gcm`.
+
+`201` the first time that endpoint is saved. `200` when the same endpoint is saved again. Both bodies are:
+
+```json
+{
+  "subscribed": true
+}
+```
+
+The response never includes `endpoint`, `keys`, or the token. One browser endpoint tracks one order. Saving it again for another order moves that row. The previous order keeps updating by polling.
+
+An order accepts 5 subscriptions. The next new endpoint is `409` and `{ "message": "subscription_limit" }`. Updating an endpoint that is already on that order does not count as a new one.
+
+More than 10 subscription writes per minute for the same token returns `429` and `{ "message": "Too Many Attempts." }`.
+
+### `DELETE /public/orders/{token}/push-subscriptions`
+
+```json
+{
+  "endpoint": "https://fcm.googleapis.com/fcm/send/example"
+}
+```
+
+`200`
+
+```json
+{
+  "message": "deleted"
+}
+```
+
+The endpoint must belong to this token. Anything else is `404` and `{ "message": "Not found." }`.
+
+### Notification payload
+
+Notify and resend send this JSON to the browser. The service worker shows it. `message` is Arabic. A click opens `url`.
+
+```json
+{
+  "restaurant_name": "Shawarma House",
+  "order_number": "0047",
+  "message": "طلب 0047 جاهز",
+  "url": "http://localhost:3000/o/43-character-token"
+}
+```
+
+There is no subscription key and no VAPID private key in this body. The VAPID public key is `NEXT_PUBLIC_VAPID_PUBLIC_KEY` in the Next.js env. It must equal `VAPID_PUBLIC_KEY` on the API. The private key stays on the API.
+
 ## Objects
 
 ### User
@@ -383,7 +449,7 @@ Validation failures are `422`:
 }
 ```
 
-Read `errors` for the field. `message` on a `422` is an English sentence, not a code. On `401`, `403`, and `429`, `message` is the code in the tables above, except Laravel's `Unauthenticated.` and `Too Many Attempts.` strings. On `404`, `message` is `Not found.` or `order_unavailable`. On `409`, `message` is `invalid_status` or `order_link_limit`.
+Read `errors` for the field. `message` on a `422` is an English sentence, not a code. On `401`, `403`, and `429`, `message` is the code in the tables above, except Laravel's `Unauthenticated.` and `Too Many Attempts.` strings. On `404`, `message` is `Not found.` or `order_unavailable`. On `409`, `message` is `invalid_status`, `order_link_limit`, or `subscription_limit`.
 
 ## Order
 
@@ -414,9 +480,3 @@ Timestamps are UTC. `status` is `waiting`, `ready`, `collected`, `cancelled`, or
 ```
 
 `already_notified` is present only on notify.
-
-## Not built yet
-
-Do not call these. They are the next API slices, not current routes.
-
-- Web Push subscriptions, and sending a push on notify and resend

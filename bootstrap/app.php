@@ -3,6 +3,7 @@
 use App\Exceptions\InvalidOrderStatus;
 use App\Exceptions\OrderLinkLimit;
 use App\Exceptions\OrderUnavailable;
+use App\Exceptions\SubscriptionLimit;
 use App\Http\Middleware\EnsureCashier;
 use App\Http\Middleware\EnsurePlatformAdmin;
 use Illuminate\Console\Scheduling\Schedule;
@@ -28,6 +29,7 @@ return Application::configure(basePath: dirname(__DIR__))
             InvalidOrderStatus::class,
             OrderUnavailable::class,
             OrderLinkLimit::class,
+            SubscriptionLimit::class,
         ]);
 
         $exceptions->render(function (InvalidOrderStatus $exception) {
@@ -45,6 +47,12 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(function (OrderLinkLimit $exception) {
             return response()->json([
                 'message' => 'order_link_limit',
+            ], 409);
+        });
+
+        $exceptions->render(function (SubscriptionLimit $exception) {
+            return response()->json([
+                'message' => 'subscription_limit',
             ], 409);
         });
     })

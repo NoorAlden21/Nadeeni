@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Contracts\WebPushClient;
+use App\Services\MinishlinkWebPushClient;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -15,7 +17,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(WebPushClient::class, MinishlinkWebPushClient::class);
     }
 
     /**
@@ -45,6 +47,12 @@ class AppServiceProvider extends ServiceProvider
 
         RateLimiter::for('order-status', function (Request $request) {
             $perMinute = app()->runningUnitTests() ? 100 : 30;
+
+            return Limit::perMinute($perMinute)->by((string) $request->route('token'));
+        });
+
+        RateLimiter::for('push-subscription', function (Request $request) {
+            $perMinute = app()->runningUnitTests() ? 100 : 10;
 
             return Limit::perMinute($perMinute)->by((string) $request->route('token'));
         });

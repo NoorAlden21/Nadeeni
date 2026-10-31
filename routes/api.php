@@ -5,6 +5,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\PublicOrderController;
 use App\Http\Controllers\PublicRestaurantController;
+use App\Http\Controllers\PushSubscriptionController;
 use App\Http\Controllers\SharedQrController;
 use Illuminate\Support\Facades\Route;
 
@@ -17,6 +18,12 @@ Route::prefix('public')->group(function () {
         ->middleware('throttle:register');
     Route::get('/orders/{token}', [PublicOrderController::class, 'show'])
         ->middleware('throttle:order-status')
+        ->where('token', '[A-Za-z0-9_-]{43}');
+    Route::post('/orders/{token}/push-subscriptions', [PushSubscriptionController::class, 'store'])
+        ->middleware('throttle:push-subscription')
+        ->where('token', '[A-Za-z0-9_-]{43}');
+    Route::delete('/orders/{token}/push-subscriptions', [PushSubscriptionController::class, 'destroy'])
+        ->middleware('throttle:push-subscription')
         ->where('token', '[A-Za-z0-9_-]{43}');
 });
 

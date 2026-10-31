@@ -281,7 +281,7 @@ A customer can use the status page without ever subscribing. Then there is a tok
 - `expires_at` — nullable. From the browser's `expirationTime`, when it sends one.
 - `last_success_at` — nullable. The push service accepted a message. Not proof the person saw it.
 - `last_error_at` — nullable.
-- `failure_count` — default 0. Reset to 0 on success. Delete the row after repeated failures, and delete it immediately when the push service returns `410 Gone`.
+- `failure_count` — default 0. Reset to 0 on success. Delete the row after 5 failed attempts, and delete it immediately when the push service returns `410 Gone`.
 - `created_at`, `updated_at`
 
 At most 5 subscriptions per order. Store the keys as normal columns. Never return them from the API and never write them to logs. Application-level encryption can wait.
@@ -304,7 +304,7 @@ Index `(order_id, created_at)`.
 
 ## 7. API
 
-Success JSON uses Laravel API resources. Errors use Laravel's normal JSON shape, `{ message, errors }`, with a stable machine-readable code in `message` where the client must branch (`order_unavailable`, `order_link_limit`, `invalid_status`, `already_notified` is not an error). Validation errors stay field-level.
+Success JSON uses Laravel API resources. Errors use Laravel's normal JSON shape, `{ message, errors }`, with a stable machine-readable code in `message` where the client must branch (`order_unavailable`, `order_link_limit`, `subscription_limit`, `invalid_status`, `already_notified` is not an error). Validation errors stay field-level.
 
 ### Cashier and platform admin
 
@@ -354,7 +354,7 @@ Cashier list: the same 4 second interval. The tablet that just called Notify, Re
 
 ### Rate limits
 
-Registration is the guessing surface. Limit it to 10 per minute per IP. Status polling is 30 per minute per token, above the 15 requests a 4 second poll needs. A food-court NAT means many customers can share one public IP, so the status limit is per token. Login is 5 per minute per IP. Resend is 5 per minute per cashier per order. Subscription writes get their own limit.
+Registration is the guessing surface. Limit it to 10 per minute per IP. Status polling is 30 per minute per token, above the 15 requests a 4 second poll needs. A food-court NAT means many customers can share one public IP, so the status limit is per token. Login is 5 per minute per IP. Resend is 5 per minute per cashier per order. Subscription writes are 10 per minute per token.
 
 ### Notify and push
 

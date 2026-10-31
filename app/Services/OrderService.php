@@ -20,6 +20,8 @@ class OrderService
 {
     private const OPEN_TOKEN_LIMIT = 5;
 
+    public function __construct(private PushNotifier $push) {}
+
     public function create(User $cashier, string $orderNumber): Order
     {
         $cashier->loadMissing('restaurant');
@@ -103,7 +105,7 @@ class OrderService
 
     public function notify(Order $order, User $cashier): bool
     {
-        return DB::transaction(function () use ($order, $cashier): bool {
+        $alreadyNotified = DB::transaction(function () use ($order, $cashier): bool {
             $locked = $this->lock($order);
 
             if ($locked->status === OrderStatus::Ready) {
@@ -125,6 +127,12 @@ class OrderService
 
             return false;
         });
+
+        if (! $alreadyNotified) {
+            $this->push->deliver(Order::query()->findOrFail($order->id), $cashier);
+        }
+
+        return $alreadyNotified;
     }
 
     public function resend(Order $order, User $cashier): void
@@ -138,6 +146,8 @@ class OrderService
                 'event_type' => OrderEventType::NotificationResent,
             ]);
         });
+
+        $this->push->deliver(Order::query()->findOrFail($order->id), $cashier);
     }
 
     public function collect(Order $order, User $cashier): void
