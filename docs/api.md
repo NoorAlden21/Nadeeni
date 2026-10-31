@@ -1,6 +1,6 @@
 # Nadeeni API
 
-Share this file with the frontend. It describes the routes that exist today. Customer pages, order actions, and Web Push are not in this API yet.
+Share this file with the frontend. It describes the routes that exist today. Customer pages and Web Push are not in this API yet.
 
 ## Base URL
 
@@ -157,6 +157,111 @@ The new user is a cashier of that restaurant, not a platform admin.
 
 `201` is the created [User](#user). The password is not in the response.
 
+## Cashier
+
+These routes require a cashier bearer token. A platform admin receives `403` and `{ "message": "forbidden" }`. A cashier whose user or restaurant is inactive receives `403` and `{ "message": "inactive" }`. A missing token receives `401` and `{ "message": "Unauthenticated." }`.
+
+The API uses the restaurant on the token. A `restaurant_id` in the body is ignored.
+
+`{order}` is the order `id` from create or list. It is a UUID. An id from another restaurant, or an unknown id, is `404`. Treat the status as not found. Do not parse `message`.
+
+`order_number` is a string, max 32 characters. The API trims spaces and keeps the rest as typed, including leading zeros and letter case. Send `"0047"`, not `47`. A JSON number is rejected.
+
+### `GET /orders`
+
+Default, with no query, is `waiting` and `ready`, newest first. Pass `status` to ask for one status: `waiting`, `ready`, `collected`, `cancelled`, or `expired`.
+
+`collected`, `cancelled`, and `expired` include only orders updated within that restaurant's `order_ttl_minutes` (default 240). `waiting` and `ready` stay in the list until they leave those statuses.
+
+`200` is a JSON array. Each item is an [Order](#order) without `cashier_qr`. The list never includes the QR token.
+
+An unknown `status` is `422`.
+
+### `POST /orders`
+
+```json
+{
+  "order_number": "0047"
+}
+```
+
+`201` is an [Order](#order) plus `cashier_qr`:
+
+```json
+{
+  "id": "019a0000-0000-7000-8000-000000000001",
+  "order_number": "0047",
+  "status": "waiting",
+  "expires_at": "2026-10-29T16:00:00.000000Z",
+  "ready_at": null,
+  "collected_at": null,
+  "cancelled_at": null,
+  "expired_at": null,
+  "created_at": "2026-10-29T12:00:00.000000Z",
+  "updated_at": "2026-10-29T12:00:00.000000Z",
+  "cashier_qr": {
+    "token": "43-character-token",
+    "url": "http://localhost:3000/o/43-character-token"
+  }
+}
+```
+
+`url` is `{FRONTEND_URL}/o/{token}`. Draw the QR from `url`. Keep `token` if you need to rebuild that URL.
+
+If this restaurant already has a `waiting` or `ready` order with that number, the response is `422` and `errors.order_number` is `An active order with this number already exists.` Open that order and use Show QR.
+
+If the live order with that number is past `expires_at`, this call marks it `expired` and creates the new order. The new order has a new token.
+
+The same number can be created at another restaurant.
+
+### `GET /orders/{order}`
+
+Show QR. `200` is the same shape as create, including `cashier_qr`. The token does not change between create and later reads.
+
+### `POST /orders/{order}/notify`
+
+No body.
+
+The first call moves `waiting` to `ready` and sets `ready_at`. `200` is the [Order](#order) plus `"already_notified": false`. There is no `cashier_qr` on this response.
+
+A second call, while the order is already `ready`, is also `200`. `already_notified` is `true`. `ready_at` does not change.
+
+Web Push is not sent yet. `ready` means the cashier asked to notify. It does not mean the customer's phone received anything.
+
+Any other status is `409` and `{ "message": "invalid_status" }`.
+
+### `POST /orders/{order}/resend`
+
+No body. Allowed only while `ready`. `200` is the [Order](#order). Status and `ready_at` stay the same. There is no `already_notified` field.
+
+Other statuses are `409` and `{ "message": "invalid_status" }`.
+
+More than 5 resends per minute for the same cashier and order returns `429` and `{ "message": "Too Many Attempts." }`.
+
+Web Push is not sent yet.
+
+### `POST /orders/{order}/collect`
+
+No body. Allowed from `waiting` or `ready`. `200` is the [Order](#order) with `status` `collected` and `collected_at` set.
+
+### `POST /orders/{order}/cancel`
+
+No body. Allowed from `waiting` or `ready`. `200` is the [Order](#order) with `status` `cancelled` and `cancelled_at` set.
+
+`collected`, `cancelled`, and `expired` are final. Notify, resend, collect, and cancel on those statuses return `409` and `{ "message": "invalid_status" }`.
+
+### `GET /restaurant/shared-qr`
+
+`200`
+
+```json
+{
+  "url": "http://localhost:3000/r/shawarma-house"
+}
+```
+
+`url` is `{FRONTEND_URL}/r/{slug}`. Draw or print the QR in the browser. This API does not return an image. `preferred_qr_mode` does not turn this route off. Per-order Show QR stays available either way.
+
 ## Objects
 
 ### User
@@ -208,11 +313,41 @@ Validation failures are `422`:
 }
 ```
 
-Read `errors` for the field. `message` on a `422` is an English sentence, not a code. On `401`, `403`, and `429`, `message` is the code in the tables above, except Laravel's `Unauthenticated.` and `Too Many Attempts.` strings.
+Read `errors` for the field. `message` on a `422` is an English sentence, not a code. On `401`, `403`, and `429`, `message` is the code in the tables above, except Laravel's `Unauthenticated.` and `Too Many Attempts.` strings. On `409`, `message` is `invalid_status`.
+
+## Order
+
+```json
+{
+  "id": "019a0000-0000-7000-8000-000000000001",
+  "order_number": "0047",
+  "status": "waiting",
+  "expires_at": "2026-10-29T16:00:00.000000Z",
+  "ready_at": null,
+  "collected_at": null,
+  "cancelled_at": null,
+  "expired_at": null,
+  "created_at": "2026-10-29T12:00:00.000000Z",
+  "updated_at": "2026-10-29T12:00:00.000000Z"
+}
+```
+
+Timestamps are UTC. `status` is `waiting`, `ready`, `collected`, `cancelled`, or `expired`.
+
+`cashier_qr` is present only on create and on `GET /orders/{order}`:
+
+```json
+{
+  "token": "43-character-token",
+  "url": "http://localhost:3000/o/43-character-token"
+}
+```
+
+`already_notified` is present only on notify.
 
 ## Not built yet
 
 Do not call these. They are the next API slices, not current routes.
 
-- Cashier orders: create, list, show QR, notify, resend, collect, cancel
 - Public customer routes: restaurant by slug, register by order number, order status, push subscriptions
+- Web Push on notify and resend

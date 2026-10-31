@@ -167,8 +167,9 @@ Transitions:
 - `ready` → `cancelled`.
 - `waiting` or `ready` → `expired` by the scheduler, or by order creation when that number must be freed before insert.
 - `collected`, `cancelled`, and `expired` are final.
+- Any other transition returns HTTP 409 with `message` set to `invalid_status`.
 
-**Notify** locks the order row. The first call from `waiting` sets `ready`, sets `ready_at`, commits, then sends push. A second call sees `ready`, returns success, and does not push. The status change is kept even when every push fails. **Resend** is allowed only from `ready`, is logged, and is rate limited. It does not change status.
+**Notify** locks the order row. The first call from `waiting` sets `ready`, sets `ready_at`, writes `order_marked_ready`, and commits, then sends push. A second call sees `ready`, returns success, and does not push. The status change is kept even when every push fails. `notification_sent` is recorded only after a successful push attempt, not when the status changes. **Resend** is allowed only from `ready`, is logged as `notification_resent`, and is rate limited. It does not change status.
 
 `expires_at` is set at creation from the restaurant's `order_ttl_minutes` (default 240). A scheduled command, every minute, marks due `waiting` and `ready` orders as `expired` and writes `expired_at`. That status change is what frees the order number. A partial unique index cannot depend on `now()`, so an order past `expires_at` still holds its number until the status becomes `expired`. Order creation does that itself, in the same transaction, before inserting a reuse of the number. The cashier does not wait for the scheduler.
 
@@ -290,7 +291,7 @@ At most 5 subscriptions per order. Store the keys as normal columns. Never retur
 - `id` — UUID
 - `order_id` — FK, `cascadeOnDelete`
 - `actor_user_id` — nullable FK, `nullOnDelete`. Null for customer registration and for the scheduler.
-- `event_type` — `created`, `customer_linked`, `notification_sent`, `notification_failed`, `notification_resent`, `collected`, `cancelled`, `expired`
+- `event_type` — `created`, `customer_linked`, `order_marked_ready`, `notification_sent`, `notification_failed`, `notification_resent`, `collected`, `cancelled`, `expired`
 - `metadata` — `jsonb`, nullable. No tokens, endpoints, or keys.
 - `created_at`
 
@@ -303,7 +304,7 @@ Index `(order_id, created_at)`.
 
 ## 7. API
 
-Success JSON uses Laravel API resources. Errors use Laravel's normal JSON shape, `{ message, errors }`, with a stable machine-readable code in `message` where the client must branch (`order_unavailable`, `order_link_limit`, `already_notified` is not an error). Validation errors stay field-level.
+Success JSON uses Laravel API resources. Errors use Laravel's normal JSON shape, `{ message, errors }`, with a stable machine-readable code in `message` where the client must branch (`order_unavailable`, `order_link_limit`, `invalid_status`, `already_notified` is not an error). Validation errors stay field-level.
 
 ### Cashier and platform admin
 
@@ -322,7 +323,7 @@ Platform admin:
 
 Cashier, always scoped to `users.restaurant_id`:
 
-- `GET /api/orders?status=waiting` — default list is `waiting` and `ready`, newest first. `collected`, `cancelled`, and `expired` only when that status is requested. Limit to the restaurant's recent window (the TTL is enough for the pilot).
+- `GET /api/orders?status=waiting` — default list is `waiting` and `ready`, newest first. `collected`, `cancelled`, and `expired` only when that status is requested. Those terminal rows are limited to orders updated within the restaurant's `order_ttl_minutes`. `waiting` and `ready` stay listed until they leave those statuses.
 - `POST /api/orders` — body `{ order_number }`. Response includes the cashier token and `{FRONTEND_URL}/o/{token}` so the dashboard can render the QR.
 - `GET /api/orders/{order}` — includes the same cashier QR payload. This is **Show QR**.
 - `POST /api/orders/{order}/notify`
@@ -353,11 +354,11 @@ Cashier list: the same 4 second interval. The tablet that just called Notify, Re
 
 ### Rate limits
 
-Registration is the guessing surface. Limit it by IP (for example 10 per minute). Status polling is limited by token, and the limit must sit above 15 requests per minute so a 4 second poll is not blocked. A food-court NAT means many customers can share one public IP, so do not use a tight per-IP cap on the status endpoint. Login, resend, and subscription writes get their own limits.
+Registration is the guessing surface. Limit it by IP (for example 10 per minute). Status polling is limited by token, and the limit must sit above 15 requests per minute so a 4 second poll is not blocked. A food-court NAT means many customers can share one public IP, so do not use a tight per-IP cap on the status endpoint. Login is 5 per minute per IP. Resend is 5 per minute per cashier per order. Subscription writes get their own limit.
 
 ### Notify and push
 
-Inside a transaction: lock the order, require `waiting`, set `ready` and `ready_at`, write the event, commit. After commit, send to each subscription. Record `notification_sent` or `notification_failed` per attempt. A `410` deletes that subscription. Other failures increment `failure_count` and set `last_error_at`.
+Inside a transaction: lock the order, require `waiting`, set `ready` and `ready_at`, write `order_marked_ready`, commit. After commit, send to each subscription. Record `notification_sent` or `notification_failed` per attempt. A `410` deletes that subscription. Other failures increment `failure_count` and set `last_error_at`.
 
 Push payload stays small: restaurant name, order number, and a ready message. The click opens `{FRONTEND_URL}/o/{token}`. No secrets in the payload.
 

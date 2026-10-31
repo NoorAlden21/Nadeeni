@@ -18,6 +18,7 @@ return new class extends Migration
             $table->enum('event_type', [
                 'created',
                 'customer_linked',
+                'order_marked_ready',
                 'notification_sent',
                 'notification_failed',
                 'notification_resent',
