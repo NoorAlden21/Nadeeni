@@ -21,6 +21,17 @@ Content-Type: application/json
 
 The browser origin must be exactly `FRONTEND_ORIGIN` from the API `.env` (local default `http://localhost:3000`). The API does not use cookies. Send the token on the `Authorization` header.
 
+Who calls what:
+
+| Screen | Token | Routes |
+|---|---|---|
+| Platform admin | `is_platform_admin: true` | `/admin/restaurants` |
+| Cashier | `restaurant_role: "cashier"` | `/orders`, `/restaurant/shared-qr` |
+| Owner | `restaurant_role: "owner"` | `/restaurant/stats` |
+| Customer | none | `/public/...` |
+
+`POST /auth/login`, `POST /auth/logout`, and `GET /me` are shared by the admin, the cashier, and the owner.
+
 ## Auth
 
 Login returns a token like `1|randomstring`. Store that whole string. Send it on later requests:
@@ -54,24 +65,25 @@ No token.
     "name": "Platform Admin",
     "email": "admin@nadeeni.test",
     "is_platform_admin": true,
+    "restaurant_role": null,
     "is_active": true,
     "restaurant": null
   }
 }
 ```
 
-A cashier has `is_platform_admin: false` and a `restaurant` object. See [User](#user).
+A cashier or owner has `is_platform_admin: false`, `restaurant_role` set, and a `restaurant` object. See [User](#user).
 
 | Status | `message` | When |
 |---|---|---|
 | 401 | `invalid_credentials` | Unknown email or wrong password |
-| 403 | `inactive` | User is inactive, or the cashier's restaurant is inactive |
+| 403 | `inactive` | User is inactive, or their restaurant is inactive |
 | 422 | validation | Missing or invalid email or password |
 | 429 | `Too Many Attempts.` | More than 5 login attempts per minute from the same IP |
 
 ### `POST /auth/logout`
 
-Requires the bearer token.
+Requires the bearer token. A missing token is `401` and `{ "message": "Unauthenticated." }`.
 
 `200`
 
@@ -83,13 +95,13 @@ Requires the bearer token.
 
 ### `GET /me`
 
-Requires the bearer token.
+Requires the bearer token. A missing token is `401` and `{ "message": "Unauthenticated." }`.
 
-`200` is the [User](#user) object, with no wrapper.
+`200` is the [User](#user) object, with no wrapper. Use `restaurant_role` to choose the cashier screen or the owner screen. `restaurant` is `null` for the platform admin.
 
 ## Platform admin
 
-These four routes require a bearer token for a user with `is_platform_admin: true`. A cashier receives `403` and `{ "message": "forbidden" }`. A missing token receives `401` and `{ "message": "Unauthenticated." }`.
+These routes require a bearer token for a user with `is_platform_admin: true`. A cashier or an owner receives `403` and `{ "message": "forbidden" }`. A missing token receives `401` and `{ "message": "Unauthenticated." }`.
 
 ### `GET /admin/restaurants`
 
@@ -155,11 +167,19 @@ Send only the fields that change. The same rules as create apply. `{id}` is the 
 
 The new user is a cashier of that restaurant, not a platform admin.
 
+`201` is the created [User](#user). The password is not in the response. `restaurant_role` is `cashier`.
+
+### `POST /admin/restaurants/{id}/owners`
+
+Same body and validation as creating a cashier.
+
+The new user is an owner of that restaurant. `restaurant_role` is `owner`. An owner can read stats and cannot manage orders.
+
 `201` is the created [User](#user). The password is not in the response.
 
 ## Cashier
 
-These routes require a cashier bearer token. A platform admin receives `403` and `{ "message": "forbidden" }`. A cashier whose user or restaurant is inactive receives `403` and `{ "message": "inactive" }`. A missing token receives `401` and `{ "message": "Unauthenticated." }`.
+These routes require a cashier bearer token. A platform admin or an owner receives `403` and `{ "message": "forbidden" }`. A cashier whose user or restaurant is inactive receives `403` and `{ "message": "inactive" }`. A missing token receives `401` and `{ "message": "Unauthenticated." }`.
 
 The API uses the restaurant on the token. A `restaurant_id` in the body is ignored.
 
@@ -174,6 +194,8 @@ Default, with no query, is `waiting` and `ready`, newest first. Pass `status` to
 `collected`, `cancelled`, and `expired` include only orders updated within that restaurant's `order_ttl_minutes` (default 240). `waiting` and `ready` stay in the list until they leave those statuses.
 
 `200` is a JSON array. Each item is an [Order](#order) without `cashier_qr`. The list never includes the QR token.
+
+Poll this every 4 seconds. After a number correction, Notify, Resend, Collect, or Cancel, update the row from that response immediately. The next poll will match it.
 
 An unknown `status` is `422`.
 
@@ -218,6 +240,26 @@ The same number can be created at another restaurant.
 
 Show QR. `200` is the same shape as create, including `cashier_qr`. The token does not change between create and later reads.
 
+### `PATCH /orders/{order}`
+
+Correct a mistyped number. The order and its QR stay the same. The customer page shows the new number on the next poll.
+
+```json
+{
+  "order_number": "0048"
+}
+```
+
+`order_number` follows the same rules as create. Allowed while the order is `waiting` or `ready`, including after Notify.
+
+`200` is the [Order](#order) with the new `order_number`. This response has no `cashier_qr`. Read the existing QR from create or from `GET /orders/{order}`.
+
+Sending the number the order already has is `200` and changes nothing.
+
+If another `waiting` or `ready` order at this restaurant already has that number, the response is `422` and `errors.order_number` is `An active order with this number already exists.`
+
+`collected`, `cancelled`, and `expired` return `409` and `{ "message": "invalid_status" }`.
+
 ### `POST /orders/{order}/notify`
 
 No body.
@@ -246,9 +288,26 @@ No body. Allowed from `waiting` or `ready`. `200` is the [Order](#order) with `s
 
 ### `POST /orders/{order}/cancel`
 
-No body. Allowed from `waiting` or `ready`. `200` is the [Order](#order) with `status` `cancelled` and `cancelled_at` set.
+No body. This is the customer cancelling, not a way to fix a typo. Correct a mistyped number with `PATCH /orders/{order}`.
 
-`collected`, `cancelled`, and `expired` are final. Notify, resend, collect, and cancel on those statuses return `409` and `{ "message": "invalid_status" }`.
+Allowed from `waiting` or `ready`. `200` is the [Order](#order) with `status` `cancelled` and `cancelled_at` set. `ready_at` stays as it was. The number can be used on a new order after this.
+
+```json
+{
+  "id": "019a0000-0000-7000-8000-000000000001",
+  "order_number": "0047",
+  "status": "cancelled",
+  "expires_at": "2026-10-29T16:00:00.000000Z",
+  "ready_at": null,
+  "collected_at": null,
+  "cancelled_at": "2026-10-29T12:10:00.000000Z",
+  "expired_at": null,
+  "created_at": "2026-10-29T12:00:00.000000Z",
+  "updated_at": "2026-10-29T12:10:00.000000Z"
+}
+```
+
+`collected`, `cancelled`, and `expired` are final. Notify, resend, collect, cancel, and a number change on those statuses return `409` and `{ "message": "invalid_status" }`.
 
 ### `GET /restaurant/shared-qr`
 
@@ -261,6 +320,51 @@ No body. Allowed from `waiting` or `ready`. `200` is the [Order](#order) with `s
 ```
 
 `url` is `{FRONTEND_URL}/r/{slug}`. Draw or print the QR in the browser. This API does not return an image. `preferred_qr_mode` does not turn this route off. Per-order Show QR stays available either way.
+
+## Restaurant owner
+
+These routes require an owner bearer token. A cashier or a platform admin receives `403` and `{ "message": "forbidden" }`. An inactive owner or restaurant receives `403` and `{ "message": "inactive" }`.
+
+The API uses the restaurant on the token.
+
+### `GET /restaurant/stats?from=2026-10-28&to=2026-10-30`
+
+`from` and `to` are required `YYYY-MM-DD` dates. `to` is on or after `from`. The range is at most 90 days. Dates are interpreted in the restaurant timezone.
+
+`200`
+
+```json
+{
+  "from": "2026-10-29",
+  "to": "2026-10-29",
+  "timezone": "Asia/Damascus",
+  "orders": 4,
+  "ready_orders": 3,
+  "cancelled_orders": 1,
+  "average_ready_seconds": 400,
+  "orders_without_browser": 1,
+  "new_browsers": 2,
+  "returning_browsers": 1,
+  "days": [
+    {
+      "date": "2026-10-29",
+      "orders": 4,
+      "ready_orders": 3,
+      "cancelled_orders": 1,
+      "average_ready_seconds": 400,
+      "orders_without_browser": 1,
+      "new_browsers": 2,
+      "returning_browsers": 1
+    }
+  ]
+}
+```
+
+`orders` counts orders created in the window. `ready_orders` is how many of those have `ready_at`. `cancelled_orders` is how many of those now have status `cancelled`. `average_ready_seconds` is the average of `ready_at - created_at` for the ready subset, or `null` when none became ready. `days` includes every date from `from` through `to`, including dates with zero orders. On those dates `average_ready_seconds` is `null`.
+
+`new_browsers` and `returning_browsers` are distinct browsers that opened a page in the window. A browser is new when its first order at this restaurant is inside the window. The same browser is returning when it already had an earlier order there. `orders_without_browser` never sent an id, so leave those out of the new/returning percentage. Daily browser numbers use that rule for each day, so the days will not add up to the range totals.
+
+A missing date, a reversed range, or a range longer than 90 days is `422`.
 
 ## Public
 
@@ -284,11 +388,14 @@ A missing or inactive restaurant is `404` and `{ "message": "Not found." }`. Tre
 
 ```json
 {
-  "order_number": "0047"
+  "order_number": "0047",
+  "visitor_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 }
 ```
 
 Send `order_number` as a string. The API trims spaces and keeps leading zeros and letter case. A JSON number is rejected.
+
+`visitor_id` is optional. When the customer page has one, send the UUID it stored in `localStorage`. The first id on an order is kept. A later id does not replace it. The response does not include it. An invalid UUID is `422`.
 
 `201` when that restaurant has a `waiting` or `ready` order with that number, and `expires_at` is still in the future:
 
@@ -315,6 +422,14 @@ A blank or too-long `order_number` is `422`. Read `errors.order_number`.
 ### `GET /public/orders/{token}`
 
 `{token}` is the 43-character token from registration or from the cashier QR.
+
+Send the stored browser id on this request too, including while polling:
+
+```http
+X-Visitor-Id: aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa
+```
+
+A valid id is saved when the order does not have one yet. An invalid header is ignored, and the status response stays `200`. The JSON does not include the id.
 
 `200`
 
@@ -398,6 +513,10 @@ Notify and resend send this JSON to the browser. The service worker shows it. `m
 
 There is no subscription key and no VAPID private key in this body. The VAPID public key is `NEXT_PUBLIC_VAPID_PUBLIC_KEY` in the Next.js env. It must equal `VAPID_PUBLIC_KEY` on the API. The private key stays on the API.
 
+The customer page creates the browser id with `crypto.randomUUID()`, stores it in `localStorage`, and sends that same value on later visits. Closing the tab keeps it. Clearing the site data, a private window, or another browser starts a new id.
+
+Show the notification from `restaurant_name` and `message`. A click opens `url`. On iOS, lock-screen delivery needs the site added to the Home Screen on iOS 16.4 or newer, then opened from that icon before the customer allows notifications. A normal Safari tab will not show that alert. The status page still updates by polling. The cashier screen says the request was sent. It does not say the customer received it.
+
 ## Objects
 
 ### User
@@ -408,6 +527,7 @@ There is no subscription key and no VAPID private key in this body. The VAPID pu
   "name": "Hala",
   "email": "hala@shawarma.test",
   "is_platform_admin": false,
+  "restaurant_role": "cashier",
   "is_active": true,
   "restaurant": {
     "name": "Shawarma House",
@@ -418,7 +538,7 @@ There is no subscription key and no VAPID private key in this body. The VAPID pu
 }
 ```
 
-`restaurant` is `null` for a platform admin. `preferred_qr_mode` is `shared` or `per_order`. It only changes what the cashier screen should emphasize. Both QR flows will exist for every restaurant.
+`restaurant` is `null` for a platform admin, and `restaurant_role` is `null` too. A restaurant user has `restaurant_role` `cashier` or `owner`. `preferred_qr_mode` is `shared` or `per_order`. It only changes what the cashier screen should emphasize. Both QR flows will exist for every restaurant.
 
 ### Restaurant
 

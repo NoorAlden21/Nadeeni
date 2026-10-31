@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Enums\RestaurantRole;
 use App\Models\Restaurant;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -33,6 +34,7 @@ class UserFactory extends Factory
             'remember_token' => Str::random(10),
             'is_platform_admin' => false,
             'restaurant_id' => Restaurant::factory(),
+            'restaurant_role' => RestaurantRole::Cashier,
             'is_active' => true,
         ];
     }
@@ -42,6 +44,7 @@ class UserFactory extends Factory
         return $this->state(fn (array $attributes) => [
             'is_platform_admin' => true,
             'restaurant_id' => null,
+            'restaurant_role' => null,
         ]);
     }
 

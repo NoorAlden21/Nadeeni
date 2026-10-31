@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\OrderStatus;
 use App\Http\Requests\IndexOrdersRequest;
 use App\Http\Requests\StoreOrderRequest;
+use App\Http\Requests\UpdateOrderRequest;
 use App\Http\Resources\OrderResource;
 use App\Models\Order;
 use App\Services\OrderService;
@@ -57,6 +58,18 @@ class OrderController extends Controller
         return OrderResource::withCashierQr(
             $this->findOrder($request, $order)->load('cashierQr')
         );
+    }
+
+    public function update(UpdateOrderRequest $request, string $order): OrderResource
+    {
+        $model = $this->findOrder($request, $order);
+        $this->orders->updateNumber(
+            $model,
+            $request->user(),
+            $request->string('order_number')->toString(),
+        );
+
+        return new OrderResource($model->refresh());
     }
 
     public function notify(Request $request, string $order): OrderResource

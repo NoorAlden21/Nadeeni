@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Enums\PreferredQrMode;
+use App\Enums\RestaurantRole;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreCashierRequest;
 use App\Http\Requests\StoreRestaurantRequest;
@@ -46,18 +47,29 @@ class RestaurantController extends Controller
 
     public function storeCashier(StoreCashierRequest $request, Restaurant $restaurant): JsonResponse
     {
-        $cashier = User::query()->create([
+        return $this->createRestaurantUser($request, $restaurant, RestaurantRole::Cashier);
+    }
+
+    public function storeOwner(StoreCashierRequest $request, Restaurant $restaurant): JsonResponse
+    {
+        return $this->createRestaurantUser($request, $restaurant, RestaurantRole::Owner);
+    }
+
+    private function createRestaurantUser(StoreCashierRequest $request, Restaurant $restaurant, RestaurantRole $role): JsonResponse
+    {
+        $user = User::query()->create([
             'name' => $request->string('name')->toString(),
             'email' => $request->string('email')->toString(),
             'password' => $request->string('password')->toString(),
             'is_platform_admin' => false,
             'restaurant_id' => $restaurant->id,
+            'restaurant_role' => $role,
             'is_active' => true,
         ]);
 
-        $cashier->load('restaurant');
+        $user->load('restaurant');
 
-        return (new UserResource($cashier))
+        return (new UserResource($user))
             ->response()
             ->setStatusCode(201);
     }

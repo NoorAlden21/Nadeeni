@@ -63,7 +63,7 @@ class OrderService
         });
     }
 
-    public function registerShared(Restaurant $restaurant, string $orderNumber): OrderAccessToken
+    public function registerShared(Restaurant $restaurant, string $orderNumber, ?string $visitorId = null): OrderAccessToken
     {
         $order = Order::query()
             ->where('restaurant_id', $restaurant->id)
@@ -76,7 +76,7 @@ class OrderService
             throw new OrderUnavailable;
         }
 
-        return DB::transaction(function () use ($order): OrderAccessToken {
+        return DB::transaction(function () use ($order, $visitorId): OrderAccessToken {
             $locked = Order::query()->whereKey($order->id)->lockForUpdate()->first();
 
             if ($locked === null || ! $locked->status->isActive() || ! $locked->expires_at->isFuture()) {
@@ -85,6 +85,12 @@ class OrderService
 
             if ($locked->accessTokens()->whereNull('revoked_at')->count() >= self::OPEN_TOKEN_LIMIT) {
                 throw new OrderLinkLimit;
+            }
+
+            if ($visitorId !== null && $locked->visitor_id === null) {
+                $locked->forceFill([
+                    'visitor_id' => $visitorId,
+                ])->save();
             }
 
             $token = $locked->accessTokens()->create([
@@ -100,6 +106,34 @@ class OrderService
             $token->setRelation('order', $locked);
 
             return $token;
+        });
+    }
+
+    public function updateNumber(Order $order, User $cashier, string $orderNumber): void
+    {
+        DB::transaction(function () use ($order, $cashier, $orderNumber): void {
+            $locked = $this->lock($order);
+            $this->assertStatus($locked, [OrderStatus::Waiting, OrderStatus::Ready]);
+
+            if ($locked->order_number === $orderNumber) {
+                return;
+            }
+
+            $this->expireDueNumber($locked->restaurant_id, $orderNumber, $cashier);
+
+            try {
+                $locked->update([
+                    'order_number' => $orderNumber,
+                ]);
+            } catch (QueryException $exception) {
+                if ($this->isActiveNumberConflict($exception)) {
+                    throw ValidationException::withMessages([
+                        'order_number' => 'An active order with this number already exists.',
+                    ]);
+                }
+
+                throw $exception;
+            }
         });
     }
 

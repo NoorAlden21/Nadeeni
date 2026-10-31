@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Enums\RestaurantRole;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -13,7 +14,7 @@ class EnsureCashier
         $user = $request->user();
         $user?->loadMissing('restaurant');
 
-        if (! $user || $user->is_platform_admin || $user->restaurant_id === null) {
+        if (! $user || $user->restaurant_role !== RestaurantRole::Cashier) {
             return response()->json([
                 'message' => 'forbidden',
             ], 403);

@@ -19,6 +19,7 @@ class UserResource extends JsonResource
             'name' => $this->name,
             'email' => $this->email,
             'is_platform_admin' => $this->is_platform_admin,
+            'restaurant_role' => $this->restaurant_role?->value,
             'is_active' => $this->is_active,
             'restaurant' => $this->restaurant_id === null ? null : [
                 'name' => $this->restaurant->name,

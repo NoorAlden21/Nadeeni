@@ -34,9 +34,12 @@ class PublicRestaurantController extends Controller
             return $this->notFound();
         }
 
+        $visitorId = $request->validated('visitor_id');
+
         $token = $this->orders->registerShared(
             $restaurant,
             $request->string('order_number')->toString(),
+            is_string($visitorId) ? Str::lower($visitorId) : null,
         );
 
         return response()->json([

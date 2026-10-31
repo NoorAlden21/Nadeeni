@@ -24,6 +24,9 @@ class OrderTest extends TestCase
     public function test_guests_and_platform_admins_cannot_manage_orders(): void
     {
         $this->postJson('/api/orders', ['order_number' => '1'])->assertUnauthorized();
+        $this->patchJson('/api/orders/00000000-0000-7000-8000-000000000001', [
+            'order_number' => '2',
+        ])->assertUnauthorized();
         $this->getJson('/api/orders')->assertUnauthorized();
         $this->getJson('/api/restaurant/shared-qr')->assertUnauthorized();
 
@@ -43,6 +46,11 @@ class OrderTest extends TestCase
 
         $this->postJson('/api/orders/00000000-0000-7000-8000-000000000001/notify')
             ->assertForbidden()
+            ->assertJsonPath('message', 'forbidden');
+
+        $this->patchJson('/api/orders/00000000-0000-7000-8000-000000000001', [
+            'order_number' => '2',
+        ])->assertForbidden()
             ->assertJsonPath('message', 'forbidden');
     }
 
@@ -222,9 +230,11 @@ class OrderTest extends TestCase
         $this->postJson('/api/orders/'.$id.'/resend')->assertNotFound();
         $this->postJson('/api/orders/'.$id.'/collect')->assertNotFound();
         $this->postJson('/api/orders/'.$id.'/cancel')->assertNotFound();
+        $this->patchJson('/api/orders/'.$id, ['order_number' => '16'])->assertNotFound();
         $this->getJson('/api/orders')->assertOk()->assertJsonCount(0);
 
         $this->assertSame(OrderStatus::Waiting, Order::query()->find($id)->status);
+        $this->assertSame('15', Order::query()->find($id)->order_number);
         $this->assertSame($cashier->restaurant_id, Order::query()->find($id)->restaurant_id);
     }
 
@@ -402,6 +412,55 @@ class OrderTest extends TestCase
 
         $this->assertNotNull($event);
         $this->assertSame('* * * * *', $event->expression);
+    }
+
+    public function test_a_cashier_can_correct_a_live_order_number(): void
+    {
+        $this->actingCashier();
+
+        $created = $this->postJson('/api/orders', ['order_number' => '0047'])->assertCreated();
+        $id = $created->json('id');
+        $token = $created->json('cashier_qr.token');
+
+        $this->patchJson('/api/orders/'.$id, ['order_number' => '0048'])
+            ->assertOk()
+            ->assertJsonPath('order_number', '0048')
+            ->assertJsonPath('status', OrderStatus::Waiting->value)
+            ->assertJsonMissingPath('cashier_qr');
+
+        $this->getJson('/api/orders/'.$id)
+            ->assertOk()
+            ->assertJsonPath('order_number', '0048')
+            ->assertJsonPath('cashier_qr.token', $token);
+
+        $this->getJson('/api/public/orders/'.$token)
+            ->assertOk()
+            ->assertJsonPath('order_number', '0048')
+            ->assertJsonPath('status', OrderStatus::Waiting->value);
+
+        $this->patchJson('/api/orders/'.$id, ['order_number' => '0048'])->assertOk();
+
+        $other = $this->postJson('/api/orders', ['order_number' => '0099'])->assertCreated()->json('id');
+
+        $this->patchJson('/api/orders/'.$id, ['order_number' => '0099'])
+            ->assertUnprocessable()
+            ->assertJsonPath('errors.order_number.0', 'An active order with this number already exists.');
+        $this->assertSame('0048', Order::query()->find($id)->order_number);
+
+        $this->postJson('/api/orders/'.$other.'/notify')->assertOk();
+        $this->patchJson('/api/orders/'.$other, ['order_number' => '0100'])
+            ->assertOk()
+            ->assertJsonPath('order_number', '0100')
+            ->assertJsonPath('status', OrderStatus::Ready->value);
+
+        $this->postJson('/api/orders/'.$other.'/cancel')->assertOk();
+        $this->patchJson('/api/orders/'.$other, ['order_number' => '0101'])
+            ->assertStatus(409)
+            ->assertJsonPath('message', 'invalid_status');
+
+        $this->patchJson('/api/orders/'.$id, ['order_number' => 12])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['order_number']);
     }
 
     private function actingCashier(?Restaurant $restaurant = null): User

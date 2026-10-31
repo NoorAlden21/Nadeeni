@@ -29,6 +29,7 @@ class RegisterOrderRequest extends FormRequest
     {
         return [
             'order_number' => ['required', 'string', 'max:32'],
+            'visitor_id' => ['sometimes', 'nullable', 'uuid'],
         ];
     }
 }

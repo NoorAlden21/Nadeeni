@@ -24,6 +24,7 @@ class PlatformAdminSeeder extends Seeder
                 'password' => $password,
                 'is_platform_admin' => true,
                 'restaurant_id' => null,
+                'restaurant_role' => null,
                 'is_active' => true,
             ],
         );

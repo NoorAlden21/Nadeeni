@@ -18,6 +18,7 @@ return new class extends Migration
             $table->string('order_number', 32);
             $table->enum('status', ['waiting', 'ready', 'collected', 'cancelled', 'expired'])->default('waiting');
             $table->foreignId('created_by_user_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->uuid('visitor_id')->nullable();
             $table->timestampTz('expires_at');
             $table->timestampTz('ready_at')->nullable();
             $table->timestampTz('collected_at')->nullable();
@@ -26,6 +27,8 @@ return new class extends Migration
             $table->timestampsTz();
 
             $table->index(['restaurant_id', 'status', 'created_at']);
+            $table->index(['restaurant_id', 'created_at']);
+            $table->index(['restaurant_id', 'visitor_id']);
         });
 
         DB::statement(<<<'SQL'

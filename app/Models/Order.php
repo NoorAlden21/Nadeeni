@@ -26,6 +26,7 @@ class Order extends Model
         'order_number',
         'status',
         'created_by_user_id',
+        'visitor_id',
         'expires_at',
         'ready_at',
         'collected_at',

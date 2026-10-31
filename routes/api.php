@@ -6,6 +6,7 @@ use App\Http\Controllers\OrderController;
 use App\Http\Controllers\PublicOrderController;
 use App\Http\Controllers\PublicRestaurantController;
 use App\Http\Controllers\PushSubscriptionController;
+use App\Http\Controllers\RestaurantStatsController;
 use App\Http\Controllers\SharedQrController;
 use Illuminate\Support\Facades\Route;
 
@@ -36,12 +37,14 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/restaurants', [RestaurantController::class, 'store']);
         Route::patch('/restaurants/{restaurant}', [RestaurantController::class, 'update']);
         Route::post('/restaurants/{restaurant}/cashiers', [RestaurantController::class, 'storeCashier']);
+        Route::post('/restaurants/{restaurant}/owners', [RestaurantController::class, 'storeOwner']);
     });
 
     Route::middleware('cashier')->group(function () {
         Route::get('/orders', [OrderController::class, 'index']);
         Route::post('/orders', [OrderController::class, 'store']);
         Route::get('/orders/{order}', [OrderController::class, 'show'])->whereUuid('order');
+        Route::patch('/orders/{order}', [OrderController::class, 'update'])->whereUuid('order');
         Route::post('/orders/{order}/notify', [OrderController::class, 'notify'])->whereUuid('order');
         Route::post('/orders/{order}/resend', [OrderController::class, 'resend'])
             ->middleware('throttle:resend')
@@ -49,5 +52,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/orders/{order}/collect', [OrderController::class, 'collect'])->whereUuid('order');
         Route::post('/orders/{order}/cancel', [OrderController::class, 'cancel'])->whereUuid('order');
         Route::get('/restaurant/shared-qr', SharedQrController::class);
+    });
+
+    Route::middleware('owner')->group(function () {
+        Route::get('/restaurant/stats', [RestaurantStatsController::class, 'show']);
     });
 });

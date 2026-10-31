@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\RestaurantRole;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -25,6 +26,7 @@ class User extends Authenticatable
         'password',
         'is_platform_admin',
         'restaurant_id',
+        'restaurant_role',
         'is_active',
     ];
 
@@ -45,6 +47,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_platform_admin' => 'boolean',
+            'restaurant_role' => RestaurantRole::class,
             'is_active' => 'boolean',
         ];
     }
@@ -55,9 +58,19 @@ class User extends Authenticatable
             $isAdmin = (bool) $user->is_platform_admin;
             $hasRestaurant = $user->restaurant_id !== null;
 
-            if ($isAdmin === $hasRestaurant) {
+            if ($isAdmin) {
+                if ($hasRestaurant || $user->restaurant_role !== null) {
+                    throw new InvalidArgumentException(
+                        'A user must be a platform admin with no restaurant, or a cashier or owner assigned to one restaurant.'
+                    );
+                }
+
+                return;
+            }
+
+            if (! $hasRestaurant || ! $user->restaurant_role instanceof RestaurantRole) {
                 throw new InvalidArgumentException(
-                    'A user must be a platform admin with no restaurant, or a cashier assigned to one restaurant.'
+                    'A user must be a platform admin with no restaurant, or a cashier or owner assigned to one restaurant.'
                 );
             }
         });

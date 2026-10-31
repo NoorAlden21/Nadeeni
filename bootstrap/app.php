@@ -5,6 +5,7 @@ use App\Exceptions\OrderLinkLimit;
 use App\Exceptions\OrderUnavailable;
 use App\Exceptions\SubscriptionLimit;
 use App\Http\Middleware\EnsureCashier;
+use App\Http\Middleware\EnsureOwner;
 use App\Http\Middleware\EnsurePlatformAdmin;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
@@ -22,6 +23,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'platform.admin' => EnsurePlatformAdmin::class,
             'cashier' => EnsureCashier::class,
+            'owner' => EnsureOwner::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

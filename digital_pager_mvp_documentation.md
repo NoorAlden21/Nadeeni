@@ -57,7 +57,7 @@ Customer pages are Arabic, right-to-left. Cashier and platform-admin screens are
 - Native Android or iOS apps, and Apple App Clips.
 - SMS, WhatsApp, email, or voice calls.
 - POS integrations, payments, online ordering, menus, inventory, kitchen screens, loyalty, or table reservations.
-- Billing and advanced analytics.
+- Billing. Analytics beyond the owner summary: order counts, ready time, and returning browsers.
 - Customer accounts and cashier self-registration.
 - Password reset. An admin sets or replaces a cashier password out of band for the pilot.
 - WebSockets, Laravel Reverb, Redis, and a queue worker. The queue driver stays `sync`.
@@ -198,14 +198,15 @@ Store order status as a string plus a check constraint. Avoid a native PostgreSQ
 
 Laravel's users table, plus:
 
-- `email` — unique. Login identifier for cashiers and the platform admin.
+- `email` — unique. Login identifier for cashiers, owners, and the platform admin.
 - `password`
 - `is_platform_admin` — default false
-- `restaurant_id` — nullable FK to `restaurants`. Null for a platform admin. Required for a cashier.
+- `restaurant_id` — nullable FK to `restaurants`. Null for a platform admin. Required for a cashier or owner.
+- `restaurant_role` — `cashier` or `owner` when `restaurant_id` is set. Null for a platform admin.
 - `is_active` — default true. Inactive users cannot log in.
 - `created_at`, `updated_at`
 
-A person is one or the other for the pilot: platform admin with no restaurant, or cashier of exactly one restaurant. One login at two restaurants is out of scope, so there is no membership pivot and no Spatie permission tables. Add those only when a person actually works at two restaurants, or when an admin screen needs several editable permissions.
+A person is one of three for the pilot: platform admin with no restaurant, cashier of exactly one restaurant, or owner of exactly one restaurant. The owner can read that restaurant's stats and cannot create or update orders. One login at two restaurants is out of scope, so there is no membership pivot and no Spatie permission tables. Add those only when a person actually works at two restaurants, or when an admin screen needs several editable permissions.
 
 Deleting a restaurant that still has orders is blocked (`restrictOnDelete` from orders). `users.restaurant_id` uses `restrictOnDelete` as well.
 
@@ -218,6 +219,7 @@ No password-reset tokens in the pilot.
 - `order_number` — string, max 32. Trimmed, case-sensitive, leading zeros preserved. Not an integer.
 - `status` — `waiting`, `ready`, `collected`, `cancelled`, `expired`
 - `created_by_user_id` — FK, `nullOnDelete`
+- `visitor_id` — nullable UUID. The browser id sent by the customer page. The first id sticks. It is not a phone number and it is not returned by the API.
 - `expires_at`
 - `ready_at`, `collected_at`, `cancelled_at`, `expired_at` — nullable
 - `created_at`, `updated_at`
@@ -227,6 +229,8 @@ There is no token column on this table.
 Indexes:
 
 - `(restaurant_id, status, created_at)`
+- `(restaurant_id, created_at)` for the owner summary
+- `(restaurant_id, visitor_id)` for new and returning browsers
 - Partial unique index, so a restaurant has at most one live order per number:
 
 ```sql
@@ -319,18 +323,24 @@ Platform admin:
 - `GET /api/admin/restaurants`
 - `POST /api/admin/restaurants`
 - `PATCH /api/admin/restaurants/{restaurant}`
-- `POST /api/admin/restaurants/{restaurant}/cashiers` — creates the user bound to that restaurant.
+- `POST /api/admin/restaurants/{restaurant}/cashiers` — creates the cashier bound to that restaurant.
+- `POST /api/admin/restaurants/{restaurant}/owners` — creates the owner bound to that restaurant. Same body as a cashier. The owner is not a cashier.
 
 Cashier, always scoped to `users.restaurant_id`:
 
 - `GET /api/orders?status=waiting` — default list is `waiting` and `ready`, newest first. `collected`, `cancelled`, and `expired` only when that status is requested. Those terminal rows are limited to orders updated within the restaurant's `order_ttl_minutes`. `waiting` and `ready` stay listed until they leave those statuses.
 - `POST /api/orders` — body `{ order_number }`. Response includes the cashier token and `{FRONTEND_URL}/o/{token}` so the dashboard can render the QR.
 - `GET /api/orders/{order}` — includes the same cashier QR payload. This is **Show QR**.
+- `PATCH /api/orders/{order}` — body `{ order_number }`. Corrects the number on a `waiting` or `ready` order. The QR token stays. A duplicate active number is the same validation error as create. Terminal statuses return `invalid_status`.
 - `POST /api/orders/{order}/notify`
 - `POST /api/orders/{order}/resend`
 - `POST /api/orders/{order}/collect`
 - `POST /api/orders/{order}/cancel`
 - `GET /api/restaurant/shared-qr` — returns the public URL `{FRONTEND_URL}/r/{slug}`. Next.js draws and prints the image. Laravel does not generate a QR file.
+
+Owner, always scoped to `users.restaurant_id`. A cashier or platform admin receives `403`.
+
+- `GET /api/restaurant/stats?from=YYYY-MM-DD&to=YYYY-MM-DD` — inclusive dates in the restaurant timezone. Maximum 90 days. Counts orders created in that window, how many reached ready, how many are `cancelled`, the average of `ready_at - created_at` in seconds for those ready orders, and the same numbers per day. `new_browsers` and `returning_browsers` count distinct `visitor_id` values. A browser is new when its first order at this restaurant is inside the window. Daily browser counts use the same rule per day, so adding the days will not equal the window totals. `orders_without_browser` counts orders that never sent an id. The response contains counts only, never the ids.
 
 Notify response after a duplicate click is HTTP 200 with the order and `already_notified: true`. No second push.
 
@@ -339,8 +349,8 @@ Notify response after a duplicate click is HTTP 200 with the order and `already_
 No bearer token. Responses contain no cashier data, no other orders, no subscription secrets, and no internal numeric ids.
 
 - `GET /api/public/restaurants/{slug}` — `name` only, and only when the restaurant is active. Otherwise 404.
-- `POST /api/public/restaurants/{slug}/register` — body `{ order_number }`. On a match, create a `shared_registration` token and return it once, with the status payload. On no match, `order_unavailable`.
-- `GET /api/public/orders/{token}` — restaurant name, order number, status. Updates `last_seen_at`. This is the polling endpoint.
+- `POST /api/public/restaurants/{slug}/register` — body `{ order_number, visitor_id? }`. `visitor_id` is an optional UUID from the customer page. On a match, create a `shared_registration` token and return it once, with the status payload. On no match, `order_unavailable`. The first `visitor_id` on that order is kept.
+- `GET /api/public/orders/{token}` — restaurant name, order number, status. Updates `last_seen_at`. This is the polling endpoint. An optional `X-Visitor-Id` UUID is stored when the order does not have one yet. An invalid header is ignored. The status JSON does not include the id.
 - `POST /api/public/orders/{token}/push-subscriptions` — browser subscription: `endpoint`, `keys.p256dh`, `keys.auth`, optional `content_encoding` and `expirationTime`. Upsert on `endpoint`.
 - `DELETE /api/public/orders/{token}/push-subscriptions` — remove the subscription whose endpoint matches the current browser.
 
@@ -400,7 +410,8 @@ Built for a busy cashier on a tablet.
 - Active list: order number, created time, status, and large actions.
 - Primary action: **Notify**. Disable it after the order leaves `waiting`, so a double tap is harmless on the server and obvious on the screen.
 - **Resend** on `ready` orders.
-- **Mark collected** and **Cancel**.
+- **Correct number** on a `waiting` or `ready` row. The same QR stays on that order.
+- **Mark collected** and **Cancel**. Cancel means the customer is not taking the order. It is not how a typo is fixed.
 - **Show QR** reopens the existing cashier token for that row.
 - Loading and error states, including "this number is already active."
 - Filter: active (`waiting` and `ready`), plus the terminal statuses.
@@ -422,12 +433,21 @@ Status page `/o/{token}`:
 - Restaurant name, order number, and a clear state: being prepared, or ready for collection. Terminal states get a short final sentence.
 - Notification prompt, plus a plain statement when notifications are unavailable or blocked, iOS included.
 - Poll every 4 seconds. No refresh button required for correctness.
+- On the first visit, create a UUID, store it in `localStorage`, and send it as `visitor_id` when registering and as `X-Visitor-Id` on later status requests. Closing the tab keeps the id. Clearing site data, a private window, or another browser starts a new one.
 
 ### Platform admin
 
 - Create and edit a restaurant: name, slug, preferred QR mode, timezone, TTL minutes, active flag.
 - Create a cashier on that restaurant: name, email, password.
-- Cashiers do not get these screens.
+- Create an owner on that restaurant: name, email, password.
+- Cashiers and owners do not get these screens.
+
+### Restaurant owner
+
+- One screen. Pick a from and to date, at most 90 days.
+- Show orders, orders that became ready, cancelled orders, average minutes to ready, orders with no browser id, new browsers, and returning browsers.
+- Show the same order and browser counts for each day. The day counts are not expected to add up to the range totals.
+- Call these browsers, not people. A new phone or a cleared browser is a new id.
 
 ### Landing page
 
@@ -453,7 +473,7 @@ This repo, in order. Do not generate the whole API in one pass.
 
 ### Phase 3 — Orders
 
-- Create, list, show (with cashier QR), collect, cancel.
+- Create, list, show (with cashier QR), correct the number on a live order, collect, cancel.
 - Notify idempotency and resend.
 - Events.
 - Expiry command and schedule.
@@ -473,7 +493,13 @@ This repo, in order. Do not generate the whole API in one pass.
 - Send on notify and resend, then failure counting and `410` deletion.
 - Tests that an unauthorized cashier cannot notify, and that a second notify does not send.
 
-The Next.js repo follows the same product order: cashier dashboard, customer pages, service worker, admin. Landing page is already in progress there. Prove push on a real Android phone over HTTPS, and write down the iOS Home Screen limit next to that result.
+### Phase 6 — Restaurant owner
+
+- Owner login, separate from the cashier. The platform admin creates the owner.
+- Optional browser id on registration and on the status poll. The first id sticks.
+- Owner stats for a from/to range: order count, ready count, cancelled count, average ready time, new and returning browsers, and each day.
+
+The Next.js repo follows the same product order: cashier dashboard, customer pages, service worker, admin, owner stats. Landing page is already in progress there. Prove push on a real Android phone over HTTPS, and write down the iOS Home Screen limit next to that result.
 
 ## 12. Acceptance criteria
 
@@ -490,6 +516,8 @@ Ready for a small pilot when:
 - **Resend** sends again without creating an order or changing status.
 - The open customer page moves to ready on its own within one poll interval.
 - A supported Android browser can subscribe and receive a test push. Unsupported and blocked cases are explained honestly, including iOS.
+- An owner can read stats for their restaurant only. A cashier cannot.
+- A repeated visit from the same browser id counts as returning. Orders with no id stay in the order count and out of the browser counts.
 - Expired tokens and failed or gone subscriptions are handled without exposing other orders.
 - Production is HTTPS.
 
