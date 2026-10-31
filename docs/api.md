@@ -1,6 +1,6 @@
 # Nadeeni API
 
-Share this file with the frontend. It describes the routes that exist today. Customer pages and Web Push are not in this API yet.
+Share this file with the frontend. It describes the routes that exist today. Web Push is not in this API yet.
 
 ## Base URL
 
@@ -262,6 +262,76 @@ No body. Allowed from `waiting` or `ready`. `200` is the [Order](#order) with `s
 
 `url` is `{FRONTEND_URL}/r/{slug}`. Draw or print the QR in the browser. This API does not return an image. `preferred_qr_mode` does not turn this route off. Per-order Show QR stays available either way.
 
+## Public
+
+No bearer token. These responses have no cashier data, no other orders, and no internal ids.
+
+A missing or inactive restaurant is `404` and `{ "message": "Not found." }`. Treat that status as not found. Do not parse `message` to tell those two cases apart.
+
+### `GET /public/restaurants/{slug}`
+
+`200`
+
+```json
+{
+  "name": "Shawarma House"
+}
+```
+
+`{slug}` is the restaurant slug. Letter case in the URL does not matter.
+
+### `POST /public/restaurants/{slug}/register`
+
+```json
+{
+  "order_number": "0047"
+}
+```
+
+Send `order_number` as a string. The API trims spaces and keeps leading zeros and letter case. A JSON number is rejected.
+
+`201` when that restaurant has a `waiting` or `ready` order with that number, and `expires_at` is still in the future:
+
+```json
+{
+  "token": "43-character-token",
+  "url": "http://localhost:3000/o/43-character-token",
+  "restaurant_name": "Shawarma House",
+  "order_number": "0047",
+  "status": "waiting"
+}
+```
+
+Open `url`, or build `{your origin}/o/{token}`. The token is returned on this response only.
+
+Unknown, not-yet-entered, expired, collected, cancelled, and another restaurant's number all return `404` and `{ "message": "order_unavailable" }`. Use that same sentence in the UI for every one of those cases.
+
+An order can have 5 open links, including the cashier QR. The next registration returns `409` and `{ "message": "order_link_limit" }`.
+
+More than 10 registrations per minute from the same IP returns `429` and `{ "message": "Too Many Attempts." }`.
+
+A blank or too-long `order_number` is `422`. Read `errors.order_number`.
+
+### `GET /public/orders/{token}`
+
+`{token}` is the 43-character token from registration or from the cashier QR.
+
+`200`
+
+```json
+{
+  "restaurant_name": "Shawarma House",
+  "order_number": "0047",
+  "status": "waiting"
+}
+```
+
+`status` stays available after the order is `collected`, `cancelled`, or `expired`, so the page can show the final state. Poll every 4 seconds until one of those.
+
+An unknown or revoked token is `404` and `{ "message": "Not found." }`.
+
+More than 30 requests per minute for the same token returns `429` and `{ "message": "Too Many Attempts." }`. The limit is per token, so customers on one shared network can poll together.
+
 ## Objects
 
 ### User
@@ -313,7 +383,7 @@ Validation failures are `422`:
 }
 ```
 
-Read `errors` for the field. `message` on a `422` is an English sentence, not a code. On `401`, `403`, and `429`, `message` is the code in the tables above, except Laravel's `Unauthenticated.` and `Too Many Attempts.` strings. On `409`, `message` is `invalid_status`.
+Read `errors` for the field. `message` on a `422` is an English sentence, not a code. On `401`, `403`, and `429`, `message` is the code in the tables above, except Laravel's `Unauthenticated.` and `Too Many Attempts.` strings. On `404`, `message` is `Not found.` or `order_unavailable`. On `409`, `message` is `invalid_status` or `order_link_limit`.
 
 ## Order
 
@@ -349,5 +419,4 @@ Timestamps are UTC. `status` is `waiting`, `ready`, `collected`, `cancelled`, or
 
 Do not call these. They are the next API slices, not current routes.
 
-- Public customer routes: restaurant by slug, register by order number, order status, push subscriptions
-- Web Push on notify and resend
+- Web Push subscriptions, and sending a push on notify and resend

@@ -1,6 +1,8 @@
 <?php
 
 use App\Exceptions\InvalidOrderStatus;
+use App\Exceptions\OrderLinkLimit;
+use App\Exceptions\OrderUnavailable;
 use App\Http\Middleware\EnsureCashier;
 use App\Http\Middleware\EnsurePlatformAdmin;
 use Illuminate\Console\Scheduling\Schedule;
@@ -22,11 +24,27 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        $exceptions->dontReport(InvalidOrderStatus::class);
+        $exceptions->dontReport([
+            InvalidOrderStatus::class,
+            OrderUnavailable::class,
+            OrderLinkLimit::class,
+        ]);
 
         $exceptions->render(function (InvalidOrderStatus $exception) {
             return response()->json([
                 'message' => 'invalid_status',
+            ], 409);
+        });
+
+        $exceptions->render(function (OrderUnavailable $exception) {
+            return response()->json([
+                'message' => 'order_unavailable',
+            ], 404);
+        });
+
+        $exceptions->render(function (OrderLinkLimit $exception) {
+            return response()->json([
+                'message' => 'order_link_limit',
             ], 409);
         });
     })

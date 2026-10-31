@@ -33,7 +33,7 @@ class PostgresOrderConcurrencyTest extends TestCase
         $this->prepareDatabase();
         $setup = $this->workerJson(['setup-duplicate']);
 
-        $results = $this->concurrentCreates((string) $setup['user_id'], $setup['order_number']);
+        $results = $this->concurrentPair('create', (string) $setup['user_id'], $setup['order_number']);
 
         $this->assertSame(['created', 'validation'], $results);
         $this->assertSame(
@@ -47,7 +47,7 @@ class PostgresOrderConcurrencyTest extends TestCase
         $this->prepareDatabase();
         $setup = $this->workerJson(['setup-expire']);
 
-        $results = $this->concurrentCreates((string) $setup['user_id'], $setup['order_number']);
+        $results = $this->concurrentPair('create', (string) $setup['user_id'], $setup['order_number']);
 
         $this->assertSame(['created', 'validation'], $results);
 
@@ -88,10 +88,24 @@ class PostgresOrderConcurrencyTest extends TestCase
         $this->worker(['migrate']);
     }
 
+    public function test_two_concurrent_registrations_keep_the_token_cap(): void
+    {
+        $this->prepareDatabase();
+        $setup = $this->workerJson(['setup-link-cap']);
+
+        $results = $this->concurrentPair('register', (string) $setup['restaurant_id'], $setup['order_number']);
+
+        $this->assertSame(['limit', 'linked'], $results);
+        $this->assertSame(
+            '5',
+            $this->worker(['open-tokens', (string) $setup['restaurant_id'], $setup['order_number']]),
+        );
+    }
+
     /**
      * @return list<string>
      */
-    private function concurrentCreates(string $userId, string $orderNumber): array
+    private function concurrentPair(string $action, string $id, string $orderNumber): array
     {
         $directory = sys_get_temp_dir().DIRECTORY_SEPARATOR.'nadeeni-'.bin2hex(random_bytes(4));
         mkdir($directory);
@@ -102,8 +116,8 @@ class PostgresOrderConcurrencyTest extends TestCase
         ];
 
         $processes = [
-            $this->process(['create', $userId, $orderNumber, $ready[0], $go]),
-            $this->process(['create', $userId, $orderNumber, $ready[1], $go]),
+            $this->process([$action, $id, $orderNumber, $ready[0], $go]),
+            $this->process([$action, $id, $orderNumber, $ready[1], $go]),
         ];
 
         try {

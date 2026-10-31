@@ -6,7 +6,11 @@ use App\Enums\AccessTokenPurpose;
 use App\Enums\OrderEventType;
 use App\Enums\OrderStatus;
 use App\Exceptions\InvalidOrderStatus;
+use App\Exceptions\OrderLinkLimit;
+use App\Exceptions\OrderUnavailable;
 use App\Models\Order;
+use App\Models\OrderAccessToken;
+use App\Models\Restaurant;
 use App\Models\User;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
@@ -14,6 +18,8 @@ use Illuminate\Validation\ValidationException;
 
 class OrderService
 {
+    private const OPEN_TOKEN_LIMIT = 5;
+
     public function create(User $cashier, string $orderNumber): Order
     {
         $cashier->loadMissing('restaurant');
@@ -52,6 +58,46 @@ class OrderService
             ]);
 
             return $order->load('cashierQr');
+        });
+    }
+
+    public function registerShared(Restaurant $restaurant, string $orderNumber): OrderAccessToken
+    {
+        $order = Order::query()
+            ->where('restaurant_id', $restaurant->id)
+            ->where('order_number', $orderNumber)
+            ->whereIn('status', [OrderStatus::Waiting, OrderStatus::Ready])
+            ->where('expires_at', '>', now())
+            ->first();
+
+        if ($order === null) {
+            throw new OrderUnavailable;
+        }
+
+        return DB::transaction(function () use ($order): OrderAccessToken {
+            $locked = Order::query()->whereKey($order->id)->lockForUpdate()->first();
+
+            if ($locked === null || ! $locked->status->isActive() || ! $locked->expires_at->isFuture()) {
+                throw new OrderUnavailable;
+            }
+
+            if ($locked->accessTokens()->whereNull('revoked_at')->count() >= self::OPEN_TOKEN_LIMIT) {
+                throw new OrderLinkLimit;
+            }
+
+            $token = $locked->accessTokens()->create([
+                'purpose' => AccessTokenPurpose::SharedRegistration,
+                'expires_at' => $locked->expires_at,
+            ]);
+
+            $locked->events()->create([
+                'actor_user_id' => null,
+                'event_type' => OrderEventType::CustomerLinked,
+            ]);
+
+            $token->setRelation('order', $locked);
+
+            return $token;
         });
     }
 

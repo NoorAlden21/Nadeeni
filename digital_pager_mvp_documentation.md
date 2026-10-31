@@ -354,7 +354,7 @@ Cashier list: the same 4 second interval. The tablet that just called Notify, Re
 
 ### Rate limits
 
-Registration is the guessing surface. Limit it by IP (for example 10 per minute). Status polling is limited by token, and the limit must sit above 15 requests per minute so a 4 second poll is not blocked. A food-court NAT means many customers can share one public IP, so do not use a tight per-IP cap on the status endpoint. Login is 5 per minute per IP. Resend is 5 per minute per cashier per order. Subscription writes get their own limit.
+Registration is the guessing surface. Limit it to 10 per minute per IP. Status polling is 30 per minute per token, above the 15 requests a 4 second poll needs. A food-court NAT means many customers can share one public IP, so the status limit is per token. Login is 5 per minute per IP. Resend is 5 per minute per cashier per order. Subscription writes get their own limit.
 
 ### Notify and push
 
