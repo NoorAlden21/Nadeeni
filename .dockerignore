@@ -1,6 +1,7 @@
 .git
 .env
 .env.*
+/docs/render.md
 /vendor
 /node_modules
 /tests
