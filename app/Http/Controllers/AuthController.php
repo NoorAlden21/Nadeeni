@@ -29,6 +29,12 @@ class AuthController extends Controller
             ], 403);
         }
 
+        if ($user->restaurant !== null && ! $user->restaurant->hasCurrentSubscription()) {
+            return response()->json([
+                'message' => 'subscription_inactive',
+            ], 403);
+        }
+
         return response()->json([
             'token' => $user->createToken('api')->plainTextToken,
             'user' => new UserResource($user),

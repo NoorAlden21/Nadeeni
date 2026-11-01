@@ -11,27 +11,37 @@ use App\Http\Requests\UpdateRestaurantRequest;
 use App\Http\Resources\RestaurantResource;
 use App\Http\Resources\UserResource;
 use App\Models\Restaurant;
+use App\Models\SubscriptionPlan;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\DB;
 
 class RestaurantController extends Controller
 {
     public function index(): AnonymousResourceCollection
     {
         return RestaurantResource::collection(
-            Restaurant::query()->orderBy('name')->get()
+            Restaurant::query()->with('subscriptionPlan')->orderBy('name')->get()
         );
     }
 
     public function store(StoreRestaurantRequest $request): JsonResponse
     {
-        $restaurant = Restaurant::query()->create(array_merge([
-            'preferred_qr_mode' => PreferredQrMode::Shared->value,
-            'timezone' => 'Asia/Damascus',
-            'order_ttl_minutes' => 240,
-            'is_active' => true,
-        ], $request->validated()));
+        $restaurant = DB::transaction(function () use ($request) {
+            $restaurant = Restaurant::query()->create(array_merge([
+                'preferred_qr_mode' => PreferredQrMode::Shared->value,
+                'timezone' => 'Asia/Damascus',
+                'order_ttl_minutes' => 240,
+                'is_active' => true,
+            ], $request->safe()->except('plan_id')));
+
+            $restaurant->grant(
+                SubscriptionPlan::query()->findOrFail($request->integer('plan_id'))
+            );
+
+            return $restaurant->load('subscriptionPlan');
+        });
 
         return (new RestaurantResource($restaurant))
             ->response()
@@ -40,9 +50,15 @@ class RestaurantController extends Controller
 
     public function update(UpdateRestaurantRequest $request, Restaurant $restaurant): RestaurantResource
     {
-        $restaurant->update($request->validated());
+        $restaurant->update($request->safe()->except('plan_id'));
 
-        return new RestaurantResource($restaurant);
+        if ($request->exists('plan_id')) {
+            $restaurant->grant(
+                SubscriptionPlan::query()->findOrFail($request->integer('plan_id'))
+            );
+        }
+
+        return new RestaurantResource($restaurant->load('subscriptionPlan'));
     }
 
     public function storeCashier(StoreCashierRequest $request, Restaurant $restaurant): JsonResponse

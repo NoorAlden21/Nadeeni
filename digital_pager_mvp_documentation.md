@@ -57,7 +57,8 @@ Customer pages are Arabic, right-to-left. Cashier and platform-admin screens are
 - Native Android or iOS apps, and Apple App Clips.
 - SMS, WhatsApp, email, or voice calls.
 - POS integrations, payments, online ordering, menus, inventory, kitchen screens, loyalty, or table reservations.
-- Billing. Analytics beyond the owner summary: order counts, ready time, and returning browsers.
+- Card payments, invoices, and automatic charging. The platform admin records the plan. The API does not collect the price.
+- Analytics beyond the owner summary: order counts, ready time, and returning browsers.
 - Customer accounts and cashier self-registration.
 - Self-service password reset. The platform admin replaces a cashier or owner password from the admin account screen. There is no reset email and no reset token.
 - WebSockets, Laravel Reverb, Redis, and a queue worker. The queue driver stays `sync`.
@@ -192,7 +193,20 @@ Store order status as a string plus a check constraint. Avoid a native PostgreSQ
 - `timezone` — default `Asia/Damascus`
 - `order_ttl_minutes` — default `240`
 - `is_active` — default true. Inactive restaurants reject new orders and public registration.
+- `subscription_plan_id` — nullable FK to `subscription_plans`. Restricts delete of a plan that is still assigned.
+- `subscription_starts_at`, `subscription_ends_at` — the current granted period. Access continues until `subscription_ends_at`. A missing or past end blocks login, cashier and owner routes, and the public restaurant page.
 - `created_at`, `updated_at`
+
+### `subscription_plans`
+
+The catalog the platform admin maintains. Creating a restaurant requires an active plan.
+
+- `name` — unique
+- `interval` — `month`, `year`, or `trial`
+- `duration_days` — required for `trial` (7 or 14 for the free periods). Null for `month` and `year`, which use one calendar month or one calendar year.
+- `price` — whole number in `currency`. Not charged by this API.
+- `currency` — three letters, default `USD`
+- `is_active` — an inactive plan cannot be newly assigned. Restaurants already on it keep access until `subscription_ends_at`.
 
 ### `users`
 
@@ -320,9 +334,14 @@ Bearer token required.
 
 Platform admin:
 
+- `GET /api/admin/subscription-plans`
+- `POST /api/admin/subscription-plans`
+- `GET /api/admin/subscription-plans/{plan}`
+- `PATCH /api/admin/subscription-plans/{plan}`
+- `DELETE /api/admin/subscription-plans/{plan}` — `409` `plan_in_use` when a restaurant still has that plan.
 - `GET /api/admin/restaurants`
-- `POST /api/admin/restaurants`
-- `PATCH /api/admin/restaurants/{restaurant}`
+- `POST /api/admin/restaurants` — `plan_id` required. Grants that plan from now.
+- `PATCH /api/admin/restaurants/{restaurant}` — `plan_id` grants again. Leftover time is kept, and the new period starts at the current end. An expired restaurant starts now.
 - `POST /api/admin/restaurants/{restaurant}/cashiers` — creates the cashier bound to that restaurant.
 - `POST /api/admin/restaurants/{restaurant}/owners` — creates the owner bound to that restaurant. Same body as a cashier. The owner is not a cashier.
 - `GET /api/admin/restaurants/{restaurant}/accounts` — cashiers and owners of that restaurant. Platform admins are not included.

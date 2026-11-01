@@ -7,7 +7,9 @@ use Database\Factories\RestaurantFactory;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
 class Restaurant extends Model
@@ -25,6 +27,9 @@ class Restaurant extends Model
         'timezone',
         'order_ttl_minutes',
         'is_active',
+        'subscription_plan_id',
+        'subscription_starts_at',
+        'subscription_ends_at',
     ];
 
     /**
@@ -36,6 +41,8 @@ class Restaurant extends Model
             'preferred_qr_mode' => PreferredQrMode::class,
             'order_ttl_minutes' => 'integer',
             'is_active' => 'boolean',
+            'subscription_starts_at' => 'datetime',
+            'subscription_ends_at' => 'datetime',
         ];
     }
 
@@ -44,6 +51,30 @@ class Restaurant extends Model
         return Attribute::make(
             set: fn (string $value) => Str::lower(trim($value)),
         );
+    }
+
+    public function subscriptionPlan(): BelongsTo
+    {
+        return $this->belongsTo(SubscriptionPlan::class);
+    }
+
+    public function hasCurrentSubscription(): bool
+    {
+        return $this->subscription_ends_at instanceof Carbon
+            && $this->subscription_ends_at->greaterThan(now());
+    }
+
+    public function grant(SubscriptionPlan $plan): void
+    {
+        $start = $this->subscription_ends_at instanceof Carbon && $this->subscription_ends_at->greaterThan(now())
+            ? $this->subscription_ends_at->copy()
+            : now();
+
+        $this->forceFill([
+            'subscription_plan_id' => $plan->id,
+            'subscription_starts_at' => $start,
+            'subscription_ends_at' => $plan->periodEnd($start),
+        ])->save();
     }
 
     public function users(): HasMany

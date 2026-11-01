@@ -143,6 +143,7 @@ An owner is the same with `"restaurant_role": "owner"`. The full field list is [
 |---|---|---|
 | 401 | `invalid_credentials` | Unknown email or wrong password |
 | 403 | `inactive` | User is inactive, or their restaurant is inactive |
+| 403 | `subscription_inactive` | The restaurant has no current subscription. This is checked after `inactive` |
 | 422 | validation | Missing or invalid email or password |
 | 429 | `Too Many Attempts.` | More than 5 login attempts per minute from the same IP |
 
@@ -164,6 +165,54 @@ Requires the bearer token. A missing token is `401` and `{ "message": "Unauthent
 
 `200` is the [User](#user) object, with no wrapper. On a fresh page load, call this with the stored token before showing a staff screen. Use the same role fields as login. `restaurant` is `null` for the platform admin.
 
+## Subscription plans
+
+The API does not charge a card. The platform admin creates the plans and assigns one when creating a restaurant. A restaurant with no current subscription cannot log in, and its cashier and owner routes return `subscription_inactive`. The customer shared-QR page is not found.
+
+`month` lasts one calendar month. `year` lasts one calendar year. `trial` lasts `duration_days` days. Use a trial of 7 or 14 days for the free period. `price` is a whole number in `currency`. It is a label for the admin screen. This API does not collect it.
+
+Sending `plan_id` for a restaurant that still has time left starts the new period when the current one ends. If the current period is missing or already over, the new period starts now. Changing a plan's price or duration does not change restaurants that already have it.
+
+### `GET /admin/subscription-plans`
+
+`200` is a JSON array, sorted by name. Each item is a [Subscription plan](#subscription-plan).
+
+### `POST /admin/subscription-plans`
+
+```json
+{
+  "name": "Monthly",
+  "interval": "month",
+  "price": 25,
+  "currency": "USD"
+}
+```
+
+| Field | Rule |
+|---|---|
+| `name` | Required. String, max 255, unique. |
+| `interval` | Required. `month`, `year`, or `trial`. |
+| `duration_days` | Required for `trial`. Integer from 1 to 90. Omit it for `month` and `year`. |
+| `price` | Required. Integer from 0 to 100000000. Use `0` for a free trial. |
+| `currency` | Optional. Three letters. Default `USD`. Stored uppercase. |
+| `is_active` | Optional. Boolean. Default `true`. An inactive plan cannot be assigned. |
+
+`201` is the created [Subscription plan](#subscription-plan).
+
+### `GET /admin/subscription-plans/{id}`
+
+`200` is one [Subscription plan](#subscription-plan). `404` means that id does not exist.
+
+### `PATCH /admin/subscription-plans/{id}`
+
+Send only the fields that change. The same rules as create apply. `200` is the updated plan.
+
+### `DELETE /admin/subscription-plans/{id}`
+
+`200` is `{ "message": "deleted" }`.
+
+`409` and `{ "message": "plan_in_use" }` means a restaurant is still assigned to this plan. Set `is_active` to `false` instead of deleting it.
+
 ## Platform admin
 
 These routes require a bearer token for a user with `is_platform_admin: true`. A cashier or an owner receives `403` and `{ "message": "forbidden" }`. A missing token receives `401` and `{ "message": "Unauthenticated." }`.
@@ -181,17 +230,28 @@ These routes require a bearer token for a user with `is_platform_admin: true`. A
     "preferred_qr_mode": "shared",
     "timezone": "Asia/Damascus",
     "order_ttl_minutes": 240,
-    "is_active": true
+    "is_active": true,
+    "subscription": {
+      "plan_id": 1,
+      "plan_name": "Monthly",
+      "interval": "month",
+      "starts_at": "2026-11-01T12:00:00.000000Z",
+      "ends_at": "2026-12-01T12:00:00.000000Z",
+      "is_current": true
+    }
   }
 ]
 ```
+
+`subscription` is `null` when no plan has been assigned. `is_current` is false after `ends_at`.
 
 ### `POST /admin/restaurants`
 
 ```json
 {
   "name": "Shawarma House",
-  "slug": "Shawarma-House"
+  "slug": "Shawarma-House",
+  "plan_id": 1
 }
 ```
 
@@ -203,12 +263,15 @@ These routes require a bearer token for a user with `is_platform_admin: true`. A
 | `timezone` | Optional. PHP timezone name, such as `Asia/Damascus`. Default `Asia/Damascus`. |
 | `order_ttl_minutes` | Optional. Integer from 1 to 65535. Default `240`. |
 | `is_active` | Optional. Boolean. Default `true`. |
+| `plan_id` | Required. Id of an active subscription plan. |
 
 `201` is the created [Restaurant](#restaurant).
 
+A missing `plan_id`, or an inactive plan, is `422`.
+
 ### `PATCH /admin/restaurants/{id}`
 
-Send only the fields that change. The same rules as create apply. `{id}` is the restaurant `id` from the list or create response.
+Send only the fields that change. The same rules as create apply, except `plan_id` is optional here. Sending `plan_id` grants that plan. `{id}` is the restaurant `id` from the list or create response.
 
 `200` is the updated [Restaurant](#restaurant).
 
@@ -298,7 +361,7 @@ Their bearer tokens stop working. `404` is the same as show. A platform admin ca
 
 ## Cashier
 
-These routes require a cashier bearer token. A platform admin or an owner receives `403` and `{ "message": "forbidden" }`. A cashier whose user or restaurant is inactive receives `403` and `{ "message": "inactive" }`. A missing token receives `401` and `{ "message": "Unauthenticated." }`.
+These routes require a cashier bearer token. A platform admin or an owner receives `403` and `{ "message": "forbidden" }`. A cashier whose user or restaurant is inactive receives `403` and `{ "message": "inactive" }`. A restaurant with no current subscription receives `403` and `{ "message": "subscription_inactive" }`. A missing token receives `401` and `{ "message": "Unauthenticated." }`.
 
 The API uses the restaurant on the token. A `restaurant_id` in the body is ignored.
 
@@ -442,7 +505,7 @@ Allowed from `waiting` or `ready`. `200` is the [Order](#order) with `status` `c
 
 ## Restaurant owner
 
-These routes require an owner bearer token. A cashier or a platform admin receives `403` and `{ "message": "forbidden" }`. An inactive owner or restaurant receives `403` and `{ "message": "inactive" }`.
+These routes require an owner bearer token. A cashier or a platform admin receives `403` and `{ "message": "forbidden" }`. An inactive owner or restaurant receives `403` and `{ "message": "inactive" }`. A restaurant with no current subscription receives `403` and `{ "message": "subscription_inactive" }`.
 
 The API uses the restaurant on the token.
 
@@ -496,7 +559,7 @@ Customer routes:
 | `/r/{slug}` from the shared restaurant QR | `GET /public/restaurants/{slug}`, then `POST /public/restaurants/{slug}/register`, then open `/o/{token}` |
 | `/o/{token}` from a per-order QR or from register | `GET /public/orders/{token}` every 4 seconds, and the push-subscription routes after the customer allows notifications |
 
-A missing or inactive restaurant is `404` and `{ "message": "Not found." }`. Treat that status as not found. Do not parse `message` to tell those two cases apart.
+A missing restaurant, an inactive restaurant, or a restaurant with no current subscription is `404` and `{ "message": "Not found." }`. Treat that status as not found. Do not parse `message` to tell those cases apart. An already issued `/o/{token}` link still returns the order status.
 
 ### `GET /public/restaurants/{slug}`
 
@@ -661,12 +724,30 @@ Show the notification from `restaurant_name` and `message`. A click opens `url`.
     "name": "Shawarma House",
     "slug": "shawarma-house",
     "preferred_qr_mode": "shared",
-    "timezone": "Asia/Damascus"
+    "timezone": "Asia/Damascus",
+    "subscription_ends_at": "2026-12-01T12:00:00.000000Z",
+    "subscription_is_current": true
   }
 }
 ```
 
-`restaurant` is `null` for a platform admin, and `restaurant_role` is `null` too. A restaurant user has `restaurant_role` `cashier` or `owner`. `preferred_qr_mode` is `shared` or `per_order`. It only changes what the cashier screen should emphasize. Both QR flows will exist for every restaurant.
+`restaurant` is `null` for a platform admin, and `restaurant_role` is `null` too. A restaurant user has `restaurant_role` `cashier` or `owner`. `preferred_qr_mode` is `shared` or `per_order`. It only changes what the cashier screen should emphasize. Both QR flows will exist for every restaurant. `subscription_is_current` is false when the restaurant's period is missing or over.
+
+### Subscription plan
+
+```json
+{
+  "id": 1,
+  "name": "Monthly",
+  "interval": "month",
+  "duration_days": null,
+  "price": 25,
+  "currency": "USD",
+  "is_active": true
+}
+```
+
+`interval` is `month`, `year`, or `trial`. `duration_days` is set only for `trial`.
 
 ### Restaurant
 
@@ -678,7 +759,15 @@ Show the notification from `restaurant_name` and `message`. A click opens `url`.
   "preferred_qr_mode": "shared",
   "timezone": "Asia/Damascus",
   "order_ttl_minutes": 240,
-  "is_active": true
+  "is_active": true,
+  "subscription": {
+    "plan_id": 1,
+    "plan_name": "Monthly",
+    "interval": "month",
+    "starts_at": "2026-11-01T12:00:00.000000Z",
+    "ends_at": "2026-12-01T12:00:00.000000Z",
+    "is_current": true
+  }
 }
 ```
 
@@ -697,7 +786,7 @@ Validation failures are `422`:
 }
 ```
 
-Read `errors` for the field. `message` on a `422` is an English sentence, not a code. On `401`, `403`, and `429`, `message` is the code in the tables above, except Laravel's `Unauthenticated.` and `Too Many Attempts.` strings. On `404`, `message` is `Not found.` or `order_unavailable`. On `409`, `message` is `invalid_status`, `order_link_limit`, or `subscription_limit`.
+Read `errors` for the field. `message` on a `422` is an English sentence, not a code. On `401`, `403`, and `429`, `message` is the code in the tables above, except Laravel's `Unauthenticated.` and `Too Many Attempts.` strings. On `404`, `message` is `Not found.` or `order_unavailable`. On `409`, `message` is `invalid_status`, `order_link_limit`, `subscription_limit`, or `plan_in_use`. `subscription_limit` is the push cap. `plan_in_use` means a subscription plan still belongs to a restaurant. `subscription_inactive` is a `403`, not a `409`.
 
 ## Order
 

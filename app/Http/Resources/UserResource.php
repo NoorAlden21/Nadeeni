@@ -26,6 +26,8 @@ class UserResource extends JsonResource
                 'slug' => $this->restaurant->slug,
                 'preferred_qr_mode' => $this->restaurant->preferred_qr_mode->value,
                 'timezone' => $this->restaurant->timezone,
+                'subscription_ends_at' => $this->restaurant->subscription_ends_at?->toISOString(),
+                'subscription_is_current' => $this->restaurant->hasCurrentSubscription(),
             ],
         ];
     }

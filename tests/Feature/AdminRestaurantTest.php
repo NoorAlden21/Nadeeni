@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Enums\PreferredQrMode;
 use App\Models\Restaurant;
+use App\Models\SubscriptionPlan;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -32,10 +33,12 @@ class AdminRestaurantTest extends TestCase
     public function test_an_admin_can_create_update_and_list_restaurants(): void
     {
         Sanctum::actingAs(User::factory()->platformAdmin()->create());
+        $plan = SubscriptionPlan::factory()->create(['name' => 'Monthly']);
 
         $created = $this->postJson('/api/admin/restaurants', [
             'name' => 'Shawarma House',
             'slug' => 'Shawarma-House',
+            'plan_id' => $plan->id,
         ]);
 
         $created->assertCreated()
@@ -43,7 +46,10 @@ class AdminRestaurantTest extends TestCase
             ->assertJsonPath('preferred_qr_mode', PreferredQrMode::Shared->value)
             ->assertJsonPath('timezone', 'Asia/Damascus')
             ->assertJsonPath('order_ttl_minutes', 240)
-            ->assertJsonPath('is_active', true);
+            ->assertJsonPath('is_active', true)
+            ->assertJsonPath('subscription.plan_id', $plan->id)
+            ->assertJsonPath('subscription.plan_name', 'Monthly')
+            ->assertJsonPath('subscription.is_current', true);
 
         $restaurantId = $created->json('id');
 
@@ -65,6 +71,7 @@ class AdminRestaurantTest extends TestCase
         $this->postJson('/api/admin/restaurants', [
             'name' => 'Duplicate',
             'slug' => 'shawarma-house',
+            'plan_id' => $plan->id,
         ])->assertUnprocessable()
             ->assertJsonValidationErrors(['slug']);
     }

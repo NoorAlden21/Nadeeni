@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\RestaurantAccountController;
 use App\Http\Controllers\Admin\RestaurantController;
+use App\Http\Controllers\Admin\SubscriptionPlanController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\PublicOrderController;
@@ -34,6 +35,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
 
     Route::middleware('platform.admin')->prefix('admin')->group(function () {
+        Route::get('/subscription-plans', [SubscriptionPlanController::class, 'index']);
+        Route::post('/subscription-plans', [SubscriptionPlanController::class, 'store']);
+        Route::get('/subscription-plans/{plan}', [SubscriptionPlanController::class, 'show']);
+        Route::patch('/subscription-plans/{plan}', [SubscriptionPlanController::class, 'update']);
+        Route::delete('/subscription-plans/{plan}', [SubscriptionPlanController::class, 'destroy']);
         Route::get('/restaurants', [RestaurantController::class, 'index']);
         Route::post('/restaurants', [RestaurantController::class, 'store']);
         Route::patch('/restaurants/{restaurant}', [RestaurantController::class, 'update']);

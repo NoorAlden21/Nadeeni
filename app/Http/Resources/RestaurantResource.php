@@ -22,6 +22,26 @@ class RestaurantResource extends JsonResource
             'timezone' => $this->timezone,
             'order_ttl_minutes' => $this->order_ttl_minutes,
             'is_active' => $this->is_active,
+            'subscription' => $this->subscriptionPayload(),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function subscriptionPayload(): ?array
+    {
+        if ($this->subscription_plan_id === null) {
+            return null;
+        }
+
+        return [
+            'plan_id' => $this->subscription_plan_id,
+            'plan_name' => $this->subscriptionPlan->name,
+            'interval' => $this->subscriptionPlan->interval->value,
+            'starts_at' => $this->subscription_starts_at?->toISOString(),
+            'ends_at' => $this->subscription_ends_at?->toISOString(),
+            'is_current' => $this->hasCurrentSubscription(),
         ];
     }
 }

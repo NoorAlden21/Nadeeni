@@ -39,6 +39,7 @@ class UpdateRestaurantRequest extends FormRequest
             'timezone' => ['sometimes', 'required', 'timezone:all'],
             'order_ttl_minutes' => ['sometimes', 'required', 'integer', 'min:1', 'max:65535'],
             'is_active' => ['sometimes', 'required', 'boolean'],
+            'plan_id' => ['sometimes', 'required', 'integer', Rule::exists('subscription_plans', 'id')->where('is_active', true)],
         ];
     }
 }

@@ -56,6 +56,7 @@ class PublicRestaurantController extends Controller
         return Restaurant::query()
             ->where('slug', Str::lower($slug))
             ->where('is_active', true)
+            ->where('subscription_ends_at', '>', now())
             ->first();
     }
 

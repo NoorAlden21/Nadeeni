@@ -26,6 +26,12 @@ class EnsureCashier
             ], 403);
         }
 
+        if (! $user->restaurant->hasCurrentSubscription()) {
+            return response()->json([
+                'message' => 'subscription_inactive',
+            ], 403);
+        }
+
         return $next($request);
     }
 }
