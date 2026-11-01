@@ -1,46 +1,87 @@
 # Nadeeni API
 
-Share this file with the frontend. It describes the routes that exist today. The service worker that shows the notification lives in the Next.js repo.
+This file is the contract for the Next.js app. Implement only the routes written here.
 
-## Base URL
+The service worker that shows the notification lives in the Next.js repo. This API sends the push. It does not serve the customer page.
 
-Local:
+## How to call it
+
+Local base URL:
 
 ```text
 http://127.0.0.1:8000/api
 ```
 
-Start it from the Laravel repo with `php artisan serve`.
+Start the API from the Laravel repo with `php artisan serve`.
 
-Send JSON:
+Every path in this file is relative to that base. `POST /auth/login` means:
+
+```http
+POST http://127.0.0.1:8000/api/auth/login
+```
+
+Do not add a second `/api`. Do not drop `/api`.
+
+Send JSON on requests that have a body:
 
 ```http
 Accept: application/json
 Content-Type: application/json
 ```
 
-The browser origin must be exactly `FRONTEND_ORIGIN` from the API `.env` (local default `http://localhost:3000`). The API does not use cookies. Send the token on the `Authorization` header.
+Responses are the JSON shown below. They are not wrapped in `{ "data": ... }`. A list is a JSON array.
 
-Who calls what:
+The browser origin must be exactly `FRONTEND_ORIGIN` from the API `.env`. The local default is `http://localhost:3000`. The API does not use cookies.
 
-| Screen | Token | Routes |
+Next.js env:
+
+```text
+NEXT_PUBLIC_API_URL=http://127.0.0.1:8000/api
+NEXT_PUBLIC_VAPID_PUBLIC_KEY=
+```
+
+`NEXT_PUBLIC_VAPID_PUBLIC_KEY` must be the same string as `VAPID_PUBLIC_KEY` on the API. The API does not return that key. The private key stays on the API.
+
+## Accounts
+
+There is no public signup and no password reset. Do not build those screens, and do not call `/register`, `/signup`, or `/forgot-password`.
+
+Three people log in, all through `POST /auth/login`:
+
+| Person | How the account is created | After login |
 |---|---|---|
-| Platform admin | `is_platform_admin: true` | `/admin/restaurants` |
-| Cashier | `restaurant_role: "cashier"` | `/orders`, `/restaurant/shared-qr` |
-| Owner | `restaurant_role: "owner"` | `/restaurant/stats` |
-| Customer | none | `/public/...` |
+| Platform admin | Seeded on the API. Not created from the app. | Restaurant and staff screens |
+| Cashier | Platform admin calls `POST /admin/restaurants/{id}/cashiers` | Order screen |
+| Owner | Platform admin calls `POST /admin/restaurants/{id}/owners` | Stats screen |
+
+A restaurant is not a login. Create the restaurant first, then create a cashier and an owner for it. Creating a user does not return a token. That person logs in with the email and password the admin set.
+
+A customer never has an account. `POST /public/restaurants/{slug}/register` attaches an order number to a status link. It does not create a user.
+
+## Where each screen goes
+
+Read `user` from the login response. Do not ask the person to pick a role.
+
+| `user` | Next.js screen | Calls |
+|---|---|---|
+| `is_platform_admin: true` | Admin | `/admin/restaurants` |
+| `restaurant_role: "cashier"` | Cashier | `/orders`, `/restaurant/shared-qr` |
+| `restaurant_role: "owner"` | Owner | `/restaurant/stats` |
+| no token | Customer `/r/{slug}` and `/o/{token}` | `/public/...` |
 
 `POST /auth/login`, `POST /auth/logout`, and `GET /me` are shared by the admin, the cashier, and the owner.
 
-## Auth
-
-Login returns a token like `1|randomstring`. Store that whole string. Send it on later requests:
+Store the login `token` and send it on those screens:
 
 ```http
 Authorization: Bearer 1|randomstring
 ```
 
+Send the whole string, including the number and the `|`. A later `401` with `{ "message": "Unauthenticated." }` means that token is missing or dead. Clear it and show login.
+
 Logout revokes only the token used on that request.
+
+## Auth
 
 ### `POST /auth/login`
 
@@ -72,7 +113,29 @@ No token.
 }
 ```
 
-A cashier or owner has `is_platform_admin: false`, `restaurant_role` set, and a `restaurant` object. See [User](#user).
+A cashier or owner has `is_platform_admin: false`, `restaurant_role` set, and a `restaurant` object. Same response shape, for a cashier:
+
+```json
+{
+  "token": "2|randomstring",
+  "user": {
+    "id": 2,
+    "name": "Hala",
+    "email": "hala@shawarma.test",
+    "is_platform_admin": false,
+    "restaurant_role": "cashier",
+    "is_active": true,
+    "restaurant": {
+      "name": "Shawarma House",
+      "slug": "shawarma-house",
+      "preferred_qr_mode": "shared",
+      "timezone": "Asia/Damascus"
+    }
+  }
+}
+```
+
+An owner is the same with `"restaurant_role": "owner"`. The full field list is [User](#user). There is no password in this response.
 
 | Status | `message` | When |
 |---|---|---|
@@ -97,7 +160,7 @@ Requires the bearer token. A missing token is `401` and `{ "message": "Unauthent
 
 Requires the bearer token. A missing token is `401` and `{ "message": "Unauthenticated." }`.
 
-`200` is the [User](#user) object, with no wrapper. Use `restaurant_role` to choose the cashier screen or the owner screen. `restaurant` is `null` for the platform admin.
+`200` is the [User](#user) object, with no wrapper. On a fresh page load, call this with the stored token before showing a staff screen. Use the same role fields as login. `restaurant` is `null` for the platform admin.
 
 ## Platform admin
 
@@ -167,7 +230,7 @@ Send only the fields that change. The same rules as create apply. `{id}` is the 
 
 The new user is a cashier of that restaurant, not a platform admin.
 
-`201` is the created [User](#user). The password is not in the response. `restaurant_role` is `cashier`.
+`201` is the created [User](#user). The password is not in the response. `restaurant_role` is `cashier`. The response has no `token`. The cashier signs in with `POST /auth/login`.
 
 ### `POST /admin/restaurants/{id}/owners`
 
@@ -175,7 +238,15 @@ Same body and validation as creating a cashier.
 
 The new user is an owner of that restaurant. `restaurant_role` is `owner`. An owner can read stats and cannot manage orders.
 
-`201` is the created [User](#user). The password is not in the response.
+```json
+{
+  "name": "Nabil",
+  "email": "nabil@shawarma.test",
+  "password": "owner-password"
+}
+```
+
+`201` is the created [User](#user). The password is not in the response. The response has no `token`. The owner signs in with `POST /auth/login`.
 
 ## Cashier
 
@@ -368,7 +439,14 @@ A missing date, a reversed range, or a range longer than 90 days is `422`.
 
 ## Public
 
-No bearer token. These responses have no cashier data, no other orders, and no internal ids.
+No bearer token. Do not send `Authorization`. These responses have no cashier data, no other orders, and no internal ids.
+
+Customer routes:
+
+| Page | Calls |
+|---|---|
+| `/r/{slug}` from the shared restaurant QR | `GET /public/restaurants/{slug}`, then `POST /public/restaurants/{slug}/register`, then open `/o/{token}` |
+| `/o/{token}` from a per-order QR or from register | `GET /public/orders/{token}` every 4 seconds, and the push-subscription routes after the customer allows notifications |
 
 A missing or inactive restaurant is `404` and `{ "message": "Not found." }`. Treat that status as not found. Do not parse `message` to tell those two cases apart.
 
@@ -385,6 +463,8 @@ A missing or inactive restaurant is `404` and `{ "message": "Not found." }`. Tre
 `{slug}` is the restaurant slug. Letter case in the URL does not matter.
 
 ### `POST /public/restaurants/{slug}/register`
+
+This does not create an account. The customer stays anonymous. It attaches the typed order number to a new status link.
 
 ```json
 {
