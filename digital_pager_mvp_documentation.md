@@ -364,7 +364,7 @@ Cashier, always scoped to `users.restaurant_id`:
 
 Owner, always scoped to `users.restaurant_id`. A cashier or platform admin receives `403`.
 
-- `GET /api/restaurant/stats?from=YYYY-MM-DD&to=YYYY-MM-DD` — inclusive dates in the restaurant timezone. Maximum 90 days. Counts orders created in that window, how many reached ready, how many are `cancelled`, the average of `ready_at - created_at` in seconds for those ready orders, and the same numbers per day. `new_browsers` and `returning_browsers` count distinct `visitor_id` values. A browser is new when its first order at this restaurant is inside the window. Daily browser counts use the same rule per day, so adding the days will not equal the window totals. `orders_without_browser` counts orders that never sent an id. The response contains counts only, never the ids.
+- `GET /api/restaurant/stats?from=YYYY-MM-DD&to=YYYY-MM-DD` — inclusive dates in the restaurant timezone. Maximum 90 days. Counts orders created in that window, how many reached ready, how many are `cancelled`, the average and the longest of `ready_at - created_at` in seconds for those ready orders, and the same numbers per day. `new_browsers` and `returning_browsers` count distinct `visitor_id` values. A browser is new when its first order at this restaurant is inside the window. Daily browser counts use the same rule per day, so adding the days will not equal the window totals. `orders_without_browser` counts orders that never sent an id. The response contains counts only, never the ids.
 
 Notify response after a duplicate click is HTTP 200 with the order and `already_notified: true`. No second push.
 

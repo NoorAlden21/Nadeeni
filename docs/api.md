@@ -526,6 +526,7 @@ The API uses the restaurant on the token.
   "ready_orders": 3,
   "cancelled_orders": 1,
   "average_ready_seconds": 400,
+  "longest_ready_seconds": 600,
   "orders_without_browser": 1,
   "new_browsers": 2,
   "returning_browsers": 1,
@@ -536,6 +537,7 @@ The API uses the restaurant on the token.
       "ready_orders": 3,
       "cancelled_orders": 1,
       "average_ready_seconds": 400,
+      "longest_ready_seconds": 600,
       "orders_without_browser": 1,
       "new_browsers": 2,
       "returning_browsers": 1
@@ -544,7 +546,7 @@ The API uses the restaurant on the token.
 }
 ```
 
-`orders` counts orders created in the window. `ready_orders` is how many of those have `ready_at`. `cancelled_orders` is how many of those now have status `cancelled`. `average_ready_seconds` is the average of `ready_at - created_at` for the ready subset, or `null` when none became ready. `days` includes every date from `from` through `to`, including dates with zero orders. On those dates `average_ready_seconds` is `null`.
+`orders` counts orders created in the window. `ready_orders` is how many of those have `ready_at`. `cancelled_orders` is how many of those now have status `cancelled`. `average_ready_seconds` is the average of `ready_at - created_at` for the ready subset, or `null` when none became ready. `longest_ready_seconds` is the largest of those same durations, or `null` when none became ready. `days` includes every date from `from` through `to`, including dates with zero orders. On those dates both ready-time fields are `null`.
 
 `new_browsers` and `returning_browsers` are distinct browsers that opened a page in the window. A browser is new when its first order at this restaurant is inside the window. The same browser is returning when it already had an earlier order there. `orders_without_browser` never sent an id, so leave those out of the new/returning percentage. Daily browser numbers use that rule for each day, so the days will not add up to the range totals.
 

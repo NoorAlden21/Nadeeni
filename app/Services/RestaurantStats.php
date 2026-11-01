@@ -43,7 +43,8 @@ class RestaurantStats
                 'orders' => (int) ($row->orders ?? 0),
                 'ready_orders' => (int) ($row->ready_orders ?? 0),
                 'cancelled_orders' => (int) ($row->cancelled_orders ?? 0),
-                'average_ready_seconds' => $this->average($row->average_ready_seconds ?? null, (int) ($row->ready_orders ?? 0)),
+                'average_ready_seconds' => $this->seconds($row->average_ready_seconds ?? null, (int) ($row->ready_orders ?? 0)),
+                'longest_ready_seconds' => $this->seconds($row->longest_ready_seconds ?? null, (int) ($row->ready_orders ?? 0)),
                 'orders_without_browser' => (int) ($row->orders_without_browser ?? 0),
                 'new_browsers' => $browsers['new_browsers'],
                 'returning_browsers' => $browsers['returning_browsers'],
@@ -59,7 +60,8 @@ class RestaurantStats
             'orders' => (int) $totals->orders,
             'ready_orders' => (int) $totals->ready_orders,
             'cancelled_orders' => (int) $totals->cancelled_orders,
-            'average_ready_seconds' => $this->average($totals->average_ready_seconds, (int) $totals->ready_orders),
+            'average_ready_seconds' => $this->seconds($totals->average_ready_seconds, (int) $totals->ready_orders),
+            'longest_ready_seconds' => $this->seconds($totals->longest_ready_seconds, (int) $totals->ready_orders),
             'orders_without_browser' => (int) $totals->orders_without_browser,
             'new_browsers' => $newBrowsers,
             'returning_browsers' => $returningBrowsers,
@@ -74,6 +76,7 @@ class RestaurantStats
             ->selectRaw('SUM(CASE WHEN ready_at IS NOT NULL THEN 1 ELSE 0 END) as ready_orders')
             ->selectRaw("SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_orders")
             ->selectRaw('AVG(CASE WHEN ready_at IS NOT NULL THEN '.$this->readySecondsSql().' END) as average_ready_seconds')
+            ->selectRaw('MAX(CASE WHEN ready_at IS NOT NULL THEN '.$this->readySecondsSql().' END) as longest_ready_seconds')
             ->selectRaw('SUM(CASE WHEN visitor_id IS NULL THEN 1 ELSE 0 END) as orders_without_browser')
             ->first();
     }
@@ -91,6 +94,7 @@ class RestaurantStats
             ->selectRaw('SUM(CASE WHEN ready_at IS NOT NULL THEN 1 ELSE 0 END) as ready_orders')
             ->selectRaw("SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_orders")
             ->selectRaw('AVG(CASE WHEN ready_at IS NOT NULL THEN '.$this->readySecondsSql().' END) as average_ready_seconds')
+            ->selectRaw('MAX(CASE WHEN ready_at IS NOT NULL THEN '.$this->readySecondsSql().' END) as longest_ready_seconds')
             ->selectRaw('SUM(CASE WHEN visitor_id IS NULL THEN 1 ELSE 0 END) as orders_without_browser')
             ->groupByRaw('1')
             ->get()
@@ -184,13 +188,13 @@ class RestaurantStats
         return '(julianday(ready_at) - julianday(created_at)) * 86400';
     }
 
-    private function average(mixed $average, int $readyOrders): ?int
+    private function seconds(mixed $value, int $readyOrders): ?int
     {
-        if ($readyOrders === 0 || $average === null) {
+        if ($readyOrders === 0 || $value === null) {
             return null;
         }
 
-        return (int) round((float) $average);
+        return (int) round((float) $value);
     }
 
     private function dateKey(mixed $value): string
