@@ -59,7 +59,7 @@ Customer pages are Arabic, right-to-left. Cashier and platform-admin screens are
 - POS integrations, payments, online ordering, menus, inventory, kitchen screens, loyalty, or table reservations.
 - Billing. Analytics beyond the owner summary: order counts, ready time, and returning browsers.
 - Customer accounts and cashier self-registration.
-- Password reset. An admin sets or replaces a cashier password out of band for the pilot.
+- Self-service password reset. The platform admin replaces a cashier or owner password from the admin account screen. There is no reset email and no reset token.
 - WebSockets, Laravel Reverb, Redis, and a queue worker. The queue driver stays `sync`.
 - A "new QR / revoke token" action. Showing the existing QR again covers the glitched-scan case. Revoking a leaked QR can be added later.
 - Spatie roles and permissions, and a restaurant-membership pivot. See the data model.
@@ -210,7 +210,7 @@ A person is one of three for the pilot: platform admin with no restaurant, cashi
 
 Deleting a restaurant that still has orders is blocked (`restrictOnDelete` from orders). `users.restaurant_id` uses `restrictOnDelete` as well.
 
-No password-reset tokens in the pilot.
+No password-reset tokens in the pilot. The platform admin replaces a restaurant account password with `PATCH /api/admin/accounts/{user}`.
 
 ### `orders`
 
@@ -325,6 +325,10 @@ Platform admin:
 - `PATCH /api/admin/restaurants/{restaurant}`
 - `POST /api/admin/restaurants/{restaurant}/cashiers` — creates the cashier bound to that restaurant.
 - `POST /api/admin/restaurants/{restaurant}/owners` — creates the owner bound to that restaurant. Same body as a cashier. The owner is not a cashier.
+- `GET /api/admin/restaurants/{restaurant}/accounts` — cashiers and owners of that restaurant. Platform admins are not included.
+- `GET /api/admin/accounts/{user}` — one restaurant account.
+- `PATCH /api/admin/accounts/{user}` — name, email, password, `restaurant_role`, `is_active`. A new password or `is_active: false` revokes that account's tokens.
+- `DELETE /api/admin/accounts/{user}` — deletes that cashier or owner. Orders remain, with `created_by_user_id` set null. A platform admin cannot be deleted here.
 
 Cashier, always scoped to `users.restaurant_id`:
 

@@ -6,21 +6,21 @@ The service worker that shows the notification lives in the Next.js repo. This A
 
 ## How to call it
 
-Local base URL:
+Deployed base URL:
 
 ```text
-http://127.0.0.1:8000/api
+https://nadeeni-api.onrender.com/api
 ```
-
-Start the API from the Laravel repo with `php artisan serve`.
 
 Every path in this file is relative to that base. `POST /auth/login` means:
 
 ```http
-POST http://127.0.0.1:8000/api/auth/login
+POST https://nadeeni-api.onrender.com/api/auth/login
 ```
 
 Do not add a second `/api`. Do not drop `/api`.
+
+On a machine running the API locally, the same paths use `http://127.0.0.1:8000/api` after `php artisan serve`.
 
 Send JSON on requests that have a body:
 
@@ -36,9 +36,11 @@ The browser origin must be exactly `FRONTEND_ORIGIN` from the API `.env`. The lo
 Next.js env:
 
 ```text
-NEXT_PUBLIC_API_URL=http://127.0.0.1:8000/api
+NEXT_PUBLIC_API_URL=https://nadeeni-api.onrender.com/api
 NEXT_PUBLIC_VAPID_PUBLIC_KEY=
 ```
+
+For a local API, set `NEXT_PUBLIC_API_URL` to `http://127.0.0.1:8000/api` instead.
 
 `NEXT_PUBLIC_VAPID_PUBLIC_KEY` must be the same string as `VAPID_PUBLIC_KEY` on the API. The API does not return that key. The private key stays on the API.
 
@@ -54,7 +56,7 @@ Three people log in, all through `POST /auth/login`:
 | Cashier | Platform admin calls `POST /admin/restaurants/{id}/cashiers` | Order screen |
 | Owner | Platform admin calls `POST /admin/restaurants/{id}/owners` | Stats screen |
 
-A restaurant is not a login. Create the restaurant first, then create a cashier and an owner for it. Creating a user does not return a token. That person logs in with the email and password the admin set.
+A restaurant is not a login. Create the restaurant first, then create a cashier and an owner for it. Creating a user does not return a token. That person logs in with the email and password the admin set. The admin can list those accounts, change the name, email, password, role, or active flag, and delete an account. There is still no self-service password reset.
 
 A customer never has an account. `POST /public/restaurants/{slug}/register` attaches an order number to a status link. It does not create a user.
 
@@ -247,6 +249,52 @@ The new user is an owner of that restaurant. `restaurant_role` is `owner`. An ow
 ```
 
 `201` is the created [User](#user). The password is not in the response. The response has no `token`. The owner signs in with `POST /auth/login`.
+
+### `GET /admin/restaurants/{id}/accounts`
+
+`200` is a JSON array of the cashiers and owners of that restaurant, sorted by name. Each item is a [User](#user). Platform admins are not in this list. Another restaurant's accounts are not in this list.
+
+`404` means that restaurant id does not exist.
+
+### `GET /admin/accounts/{id}`
+
+`{id}` is the user `id` from the account list or from create.
+
+`200` is that [User](#user).
+
+`404` means that id does not exist, or it is a platform admin. This route does not manage the platform admin.
+
+### `PATCH /admin/accounts/{id}`
+
+Send only the fields that change.
+
+| Field | Rule |
+|---|---|
+| `name` | String, max 255. |
+| `email` | Email, max 255, unique across all users. |
+| `password` | String, 8 to 255 characters. This replaces the password. The old password stops working. |
+| `restaurant_role` | `cashier` or `owner`. |
+| `is_active` | Boolean. `false` turns the account off. Login then returns `403` and `{ "message": "inactive" }`. |
+
+`200` is the updated [User](#user). The password is not in the response.
+
+A new password, or `is_active: false`, deletes that account's bearer tokens. The next call with an old token is `401` and `{ "message": "Unauthenticated." }`.
+
+`404` is the same as show. `422` is a validation error, including an email that another user already has.
+
+### `DELETE /admin/accounts/{id}`
+
+Deletes that cashier or owner. Orders they created stay. The order's creator becomes empty.
+
+`200`
+
+```json
+{
+  "message": "deleted"
+}
+```
+
+Their bearer tokens stop working. `404` is the same as show. A platform admin cannot be deleted here.
 
 ## Cashier
 

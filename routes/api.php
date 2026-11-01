@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\RestaurantAccountController;
 use App\Http\Controllers\Admin\RestaurantController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\OrderController;
@@ -38,6 +39,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('/restaurants/{restaurant}', [RestaurantController::class, 'update']);
         Route::post('/restaurants/{restaurant}/cashiers', [RestaurantController::class, 'storeCashier']);
         Route::post('/restaurants/{restaurant}/owners', [RestaurantController::class, 'storeOwner']);
+        Route::get('/restaurants/{restaurant}/accounts', [RestaurantAccountController::class, 'index']);
+        Route::get('/accounts/{account}', [RestaurantAccountController::class, 'show']);
+        Route::patch('/accounts/{account}', [RestaurantAccountController::class, 'update']);
+        Route::delete('/accounts/{account}', [RestaurantAccountController::class, 'destroy']);
     });
 
     Route::middleware('cashier')->group(function () {
