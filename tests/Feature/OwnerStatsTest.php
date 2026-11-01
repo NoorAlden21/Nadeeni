@@ -119,6 +119,8 @@ class OwnerStatsTest extends TestCase
                 'average_ready_seconds' => 400,
                 'longest_ready_seconds' => 600,
                 'orders_without_browser' => 1,
+                'average_service_rating' => null,
+                'average_food_rating' => null,
                 'new_browsers' => 2,
                 'returning_browsers' => 1,
                 'days' => [[
@@ -129,6 +131,8 @@ class OwnerStatsTest extends TestCase
                     'average_ready_seconds' => 400,
                     'longest_ready_seconds' => 600,
                     'orders_without_browser' => 1,
+                    'average_service_rating' => null,
+                    'average_food_rating' => null,
                     'new_browsers' => 2,
                     'returning_browsers' => 1,
                 ]],

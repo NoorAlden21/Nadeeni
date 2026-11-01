@@ -364,7 +364,8 @@ Cashier, always scoped to `users.restaurant_id`:
 
 Owner, always scoped to `users.restaurant_id`. A cashier or platform admin receives `403`.
 
-- `GET /api/restaurant/stats?from=YYYY-MM-DD&to=YYYY-MM-DD` — inclusive dates in the restaurant timezone. Maximum 90 days. Counts orders created in that window, how many reached ready, how many are `cancelled`, the average and the longest of `ready_at - created_at` in seconds for those ready orders, and the same numbers per day. `new_browsers` and `returning_browsers` count distinct `visitor_id` values. A browser is new when its first order at this restaurant is inside the window. Daily browser counts use the same rule per day, so adding the days will not equal the window totals. `orders_without_browser` counts orders that never sent an id. The response contains counts only, never the ids.
+- `GET /api/restaurant/stats?from=YYYY-MM-DD&to=YYYY-MM-DD` — inclusive dates in the restaurant timezone. Maximum 90 days. Counts orders created in that window, how many reached ready, how many are `cancelled`, the average and the longest of `ready_at - created_at` in seconds for those ready orders, the average service rating and food rating from reviews on those orders, and the same numbers per day. `new_browsers` and `returning_browsers` count distinct `visitor_id` values. A browser is new when its first order at this restaurant is inside the window. Daily browser counts use the same rule per day, so adding the days will not equal the window totals. `orders_without_browser` counts orders that never sent an id. The response contains counts only, never the ids.
+- `GET /api/restaurant/reviews?from=YYYY-MM-DD&to=YYYY-MM-DD` — optional inclusive dates in the restaurant timezone, maximum 90 days, matched on the review time. The response has the count, both averages, and the matching reviews newest first. Omit the dates for every review.
 
 Notify response after a duplicate click is HTTP 200 with the order and `already_notified: true`. No second push.
 
@@ -375,6 +376,8 @@ No bearer token. Responses contain no cashier data, no other orders, no subscrip
 - `GET /api/public/restaurants/{slug}` — `name` only, and only when the restaurant is active. Otherwise 404.
 - `POST /api/public/restaurants/{slug}/register` — body `{ order_number, visitor_id? }`. `visitor_id` is an optional UUID from the customer page. On a match, create a `shared_registration` token and return it once, with the status payload. On no match, `order_unavailable`. The first `visitor_id` on that order is kept.
 - `GET /api/public/orders/{token}` — restaurant name, order number, status. Updates `last_seen_at`. This is the polling endpoint. An optional `X-Visitor-Id` UUID is stored when the order does not have one yet. An invalid header is ignored. The status JSON does not include the id.
+- `GET /api/public/orders/{token}/review` — the review for that order, or `404` when none exists.
+- `POST /api/public/orders/{token}/review` — one review per order, only while `ready` or `collected`. Body is `service_rating` and `food_rating` (each 1–5) and an optional `message`. A second submit returns `409` `already_reviewed`.
 - `POST /api/public/orders/{token}/push-subscriptions` — browser subscription: `endpoint`, `keys.p256dh`, `keys.auth`, optional `content_encoding` and `expirationTime`. Upsert on `endpoint`.
 - `DELETE /api/public/orders/{token}/push-subscriptions` — remove the subscription whose endpoint matches the current browser.
 

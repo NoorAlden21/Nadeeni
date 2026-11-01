@@ -46,6 +46,8 @@ class RestaurantStats
                 'average_ready_seconds' => $this->seconds($row->average_ready_seconds ?? null, (int) ($row->ready_orders ?? 0)),
                 'longest_ready_seconds' => $this->seconds($row->longest_ready_seconds ?? null, (int) ($row->ready_orders ?? 0)),
                 'orders_without_browser' => (int) ($row->orders_without_browser ?? 0),
+                'average_service_rating' => $this->rating($row->average_service_rating ?? null),
+                'average_food_rating' => $this->rating($row->average_food_rating ?? null),
                 'new_browsers' => $browsers['new_browsers'],
                 'returning_browsers' => $browsers['returning_browsers'],
             ];
@@ -63,6 +65,8 @@ class RestaurantStats
             'average_ready_seconds' => $this->seconds($totals->average_ready_seconds, (int) $totals->ready_orders),
             'longest_ready_seconds' => $this->seconds($totals->longest_ready_seconds, (int) $totals->ready_orders),
             'orders_without_browser' => (int) $totals->orders_without_browser,
+            'average_service_rating' => $this->rating($totals->average_service_rating),
+            'average_food_rating' => $this->rating($totals->average_food_rating),
             'new_browsers' => $newBrowsers,
             'returning_browsers' => $returningBrowsers,
             'days' => $days,
@@ -72,12 +76,15 @@ class RestaurantStats
     private function totals(int $restaurantId, Carbon $start, Carbon $end): Order
     {
         return $this->range($restaurantId, $start, $end)
+            ->leftJoin('order_reviews', 'order_reviews.order_id', '=', 'orders.id')
             ->selectRaw('COUNT(*) as orders')
-            ->selectRaw('SUM(CASE WHEN ready_at IS NOT NULL THEN 1 ELSE 0 END) as ready_orders')
-            ->selectRaw("SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_orders")
-            ->selectRaw('AVG(CASE WHEN ready_at IS NOT NULL THEN '.$this->readySecondsSql().' END) as average_ready_seconds')
-            ->selectRaw('MAX(CASE WHEN ready_at IS NOT NULL THEN '.$this->readySecondsSql().' END) as longest_ready_seconds')
-            ->selectRaw('SUM(CASE WHEN visitor_id IS NULL THEN 1 ELSE 0 END) as orders_without_browser')
+            ->selectRaw('SUM(CASE WHEN orders.ready_at IS NOT NULL THEN 1 ELSE 0 END) as ready_orders')
+            ->selectRaw("SUM(CASE WHEN orders.status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_orders")
+            ->selectRaw('AVG(CASE WHEN orders.ready_at IS NOT NULL THEN '.$this->readySecondsSql().' END) as average_ready_seconds')
+            ->selectRaw('MAX(CASE WHEN orders.ready_at IS NOT NULL THEN '.$this->readySecondsSql().' END) as longest_ready_seconds')
+            ->selectRaw('SUM(CASE WHEN orders.visitor_id IS NULL THEN 1 ELSE 0 END) as orders_without_browser')
+            ->selectRaw('AVG(order_reviews.service_rating) as average_service_rating')
+            ->selectRaw('AVG(order_reviews.food_rating) as average_food_rating')
             ->first();
     }
 
@@ -89,13 +96,16 @@ class RestaurantStats
         [$daySql, $bindings] = $this->localDaySql($timezone);
 
         return $this->range($restaurantId, $start, $end)
+            ->leftJoin('order_reviews', 'order_reviews.order_id', '=', 'orders.id')
             ->selectRaw($daySql.' as day', $bindings)
             ->selectRaw('COUNT(*) as orders')
-            ->selectRaw('SUM(CASE WHEN ready_at IS NOT NULL THEN 1 ELSE 0 END) as ready_orders')
-            ->selectRaw("SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_orders")
-            ->selectRaw('AVG(CASE WHEN ready_at IS NOT NULL THEN '.$this->readySecondsSql().' END) as average_ready_seconds')
-            ->selectRaw('MAX(CASE WHEN ready_at IS NOT NULL THEN '.$this->readySecondsSql().' END) as longest_ready_seconds')
-            ->selectRaw('SUM(CASE WHEN visitor_id IS NULL THEN 1 ELSE 0 END) as orders_without_browser')
+            ->selectRaw('SUM(CASE WHEN orders.ready_at IS NOT NULL THEN 1 ELSE 0 END) as ready_orders')
+            ->selectRaw("SUM(CASE WHEN orders.status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_orders")
+            ->selectRaw('AVG(CASE WHEN orders.ready_at IS NOT NULL THEN '.$this->readySecondsSql().' END) as average_ready_seconds')
+            ->selectRaw('MAX(CASE WHEN orders.ready_at IS NOT NULL THEN '.$this->readySecondsSql().' END) as longest_ready_seconds')
+            ->selectRaw('SUM(CASE WHEN orders.visitor_id IS NULL THEN 1 ELSE 0 END) as orders_without_browser')
+            ->selectRaw('AVG(order_reviews.service_rating) as average_service_rating')
+            ->selectRaw('AVG(order_reviews.food_rating) as average_food_rating')
             ->groupByRaw('1')
             ->get()
             ->keyBy(fn (Order $row): string => $this->dateKey($row->day))
@@ -160,9 +170,9 @@ class RestaurantStats
     private function range(int $restaurantId, Carbon $start, Carbon $end): Builder
     {
         return Order::query()
-            ->where('restaurant_id', $restaurantId)
-            ->where('created_at', '>=', $start->copy()->utc())
-            ->where('created_at', '<', $end->copy()->utc());
+            ->where('orders.restaurant_id', $restaurantId)
+            ->where('orders.created_at', '>=', $start->copy()->utc())
+            ->where('orders.created_at', '<', $end->copy()->utc());
     }
 
     /**
@@ -171,21 +181,21 @@ class RestaurantStats
     private function localDaySql(string $timezone): array
     {
         if (DB::getDriverName() === 'pgsql') {
-            return ['(created_at AT TIME ZONE ?)::date', [$timezone]];
+            return ['(orders.created_at AT TIME ZONE ?)::date', [$timezone]];
         }
 
         $modifier = sprintf('%+d minutes', Carbon::now($timezone)->utcOffset());
 
-        return ["date(created_at, '{$modifier}')", []];
+        return ["date(orders.created_at, '{$modifier}')", []];
     }
 
     private function readySecondsSql(): string
     {
         if (DB::getDriverName() === 'pgsql') {
-            return 'EXTRACT(EPOCH FROM (ready_at - created_at))';
+            return 'EXTRACT(EPOCH FROM (orders.ready_at - orders.created_at))';
         }
 
-        return '(julianday(ready_at) - julianday(created_at)) * 86400';
+        return '(julianday(orders.ready_at) - julianday(orders.created_at)) * 86400';
     }
 
     private function seconds(mixed $value, int $readyOrders): ?int
@@ -195,6 +205,15 @@ class RestaurantStats
         }
 
         return (int) round((float) $value);
+    }
+
+    private function rating(mixed $value): ?float
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        return round((float) $value, 1);
     }
 
     private function dateKey(mixed $value): string

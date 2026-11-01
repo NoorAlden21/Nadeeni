@@ -6,8 +6,10 @@ use App\Http\Controllers\Admin\SubscriptionPlanController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\PublicOrderController;
+use App\Http\Controllers\PublicOrderReviewController;
 use App\Http\Controllers\PublicRestaurantController;
 use App\Http\Controllers\PushSubscriptionController;
+use App\Http\Controllers\RestaurantReviewController;
 use App\Http\Controllers\RestaurantStatsController;
 use App\Http\Controllers\SharedQrController;
 use Illuminate\Support\Facades\Route;
@@ -22,6 +24,12 @@ Route::prefix('public')->group(function () {
         ->middleware('throttle:register');
     Route::get('/orders/{token}', [PublicOrderController::class, 'show'])
         ->middleware('throttle:order-status')
+        ->where('token', '[A-Za-z0-9_-]{43}');
+    Route::get('/orders/{token}/review', [PublicOrderReviewController::class, 'show'])
+        ->middleware('throttle:review')
+        ->where('token', '[A-Za-z0-9_-]{43}');
+    Route::post('/orders/{token}/review', [PublicOrderReviewController::class, 'store'])
+        ->middleware('throttle:review')
         ->where('token', '[A-Za-z0-9_-]{43}');
     Route::post('/orders/{token}/push-subscriptions', [PushSubscriptionController::class, 'store'])
         ->middleware('throttle:push-subscription')
@@ -68,5 +76,6 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::middleware('owner')->group(function () {
         Route::get('/restaurant/stats', [RestaurantStatsController::class, 'show']);
+        Route::get('/restaurant/reviews', [RestaurantReviewController::class, 'index']);
     });
 });

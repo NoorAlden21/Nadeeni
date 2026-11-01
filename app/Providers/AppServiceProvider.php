@@ -56,6 +56,12 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute($perMinute)->by((string) $request->route('token'));
         });
 
+        RateLimiter::for('review', function (Request $request) {
+            $perMinute = app()->runningUnitTests() ? 100 : 10;
+
+            return Limit::perMinute($perMinute)->by((string) $request->route('token'));
+        });
+
         RateLimiter::for('push-subscription', function (Request $request) {
             $perMinute = app()->runningUnitTests() ? 100 : 10;
 

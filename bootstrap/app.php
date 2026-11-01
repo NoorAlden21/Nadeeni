@@ -1,5 +1,6 @@
 <?php
 
+use App\Exceptions\AlreadyReviewed;
 use App\Exceptions\InvalidOrderStatus;
 use App\Exceptions\OrderLinkLimit;
 use App\Exceptions\OrderUnavailable;
@@ -30,11 +31,18 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withExceptions(function (Exceptions $exceptions) {
         $exceptions->dontReport([
+            AlreadyReviewed::class,
             InvalidOrderStatus::class,
             OrderUnavailable::class,
             OrderLinkLimit::class,
             SubscriptionLimit::class,
         ]);
+
+        $exceptions->render(function (AlreadyReviewed $exception) {
+            return response()->json([
+                'message' => 'already_reviewed',
+            ], 409);
+        });
 
         $exceptions->render(function (InvalidOrderStatus $exception) {
             return response()->json([

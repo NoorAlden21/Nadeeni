@@ -87,4 +87,9 @@ class Order extends Model
     {
         return $this->hasMany(OrderEvent::class);
     }
+
+    public function review(): HasOne
+    {
+        return $this->hasOne(OrderReview::class);
+    }
 }

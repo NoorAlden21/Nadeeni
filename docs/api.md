@@ -528,6 +528,8 @@ The API uses the restaurant on the token.
   "average_ready_seconds": 400,
   "longest_ready_seconds": 600,
   "orders_without_browser": 1,
+  "average_service_rating": null,
+  "average_food_rating": null,
   "new_browsers": 2,
   "returning_browsers": 1,
   "days": [
@@ -539,6 +541,8 @@ The API uses the restaurant on the token.
       "average_ready_seconds": 400,
       "longest_ready_seconds": 600,
       "orders_without_browser": 1,
+      "average_service_rating": null,
+      "average_food_rating": null,
       "new_browsers": 2,
       "returning_browsers": 1
     }
@@ -546,11 +550,42 @@ The API uses the restaurant on the token.
 }
 ```
 
-`orders` counts orders created in the window. `ready_orders` is how many of those have `ready_at`. `cancelled_orders` is how many of those now have status `cancelled`. `average_ready_seconds` is the average of `ready_at - created_at` for the ready subset, or `null` when none became ready. `longest_ready_seconds` is the largest of those same durations, or `null` when none became ready. `days` includes every date from `from` through `to`, including dates with zero orders. On those dates both ready-time fields are `null`.
+`orders` counts orders created in the window. `ready_orders` is how many of those have `ready_at`. `cancelled_orders` is how many of those now have status `cancelled`. `average_ready_seconds` is the average of `ready_at - created_at` for the ready subset, or `null` when none became ready. `longest_ready_seconds` is the largest of those same durations, or `null` when none became ready. `average_service_rating` and `average_food_rating` average the reviews on orders created in the window. Each is `null` when that window or day has no review. A review uses one decimal, so `4.5` stays `4.5`. `days` includes every date from `from` through `to`, including dates with zero orders. On those dates the ready-time fields and both rating averages are `null`.
 
 `new_browsers` and `returning_browsers` are distinct browsers that opened a page in the window. A browser is new when its first order at this restaurant is inside the window. The same browser is returning when it already had an earlier order there. `orders_without_browser` never sent an id, so leave those out of the new/returning percentage. Daily browser numbers use that rule for each day, so the days will not add up to the range totals.
 
 A missing date, a reversed range, or a range longer than 90 days is `422`.
+
+### `GET /restaurant/reviews?from=2026-10-29&to=2026-10-29`
+
+`from` and `to` are optional. Pass both, or pass neither. They are `YYYY-MM-DD` dates in the restaurant timezone, `to` is on or after `from`, and the range is at most 90 days. The filter uses the time the review was sent, not the time the order was created.
+
+With no dates, the response covers every review for this restaurant. `from` and `to` are then `null`.
+
+`200`
+
+```json
+{
+  "from": "2026-10-29",
+  "to": "2026-10-29",
+  "reviews": 1,
+  "average_service_rating": 4,
+  "average_food_rating": 5,
+  "items": [
+    {
+      "order_number": "0047",
+      "service_rating": 4,
+      "food_rating": 5,
+      "message": "The wait was fine.",
+      "created_at": "2026-11-01T18:00:00.000000Z"
+    }
+  ]
+}
+```
+
+`reviews` is how many reviews are in `items`. The two averages are for those same reviews, one decimal, or `null` when `reviews` is 0. `items` is newest first. `message` is `null` when the customer left no note. `service_rating` is the service and the wait. `food_rating` is the food. Both scores on an item are integers from 1 to 5.
+
+A missing half of the range, a reversed range, or a range longer than 90 days is `422`.
 
 ## Public
 
@@ -642,6 +677,45 @@ A valid id is saved when the order does not have one yet. An invalid header is i
 `status` stays available after the order is `collected`, `cancelled`, or `expired`, so the page can show the final state. Poll every 4 seconds until one of those.
 
 An unknown or revoked token is `404` and `{ "message": "Not found." }`.
+
+### `GET /public/orders/{token}/review`
+
+No bearer token. `200` is the review for that order. A missing review, or an unknown token, is `404` and `{ "message": "Not found." }`. Call this before showing the form. Hide the form when a review is already there.
+
+```json
+{
+  "service_rating": 4,
+  "food_rating": 5,
+  "message": "The wait was fine.",
+  "created_at": "2026-11-01T18:00:00.000000Z"
+}
+```
+
+### `POST /public/orders/{token}/review`
+
+No bearer token. The customer sends this when they click Send. Star taps are not saved.
+
+```json
+{
+  "service_rating": 4,
+  "food_rating": 5,
+  "message": "The wait was fine."
+}
+```
+
+| Field | Rule |
+|---|---|
+| `service_rating` | Required. Integer from 1 to 5. Service and waiting, one score. |
+| `food_rating` | Required. Integer from 1 to 5. |
+| `message` | Optional. String, max 500. A blank string is stored as `null`. |
+
+`200` is the saved review, the same shape as the GET.
+
+The order must be `ready` or `collected`. `waiting`, `cancelled`, and `expired` return `409` and `{ "message": "invalid_status" }`.
+
+One review per order. A second Send, including from another link for that same order, returns `409` and `{ "message": "already_reviewed" }`. The first review stays.
+
+More than 10 review reads or sends per minute for the same token returns `429` and `{ "message": "Too Many Attempts." }`.
 
 More than 30 requests per minute for the same token returns `429` and `{ "message": "Too Many Attempts." }`. The limit is per token, so customers on one shared network can poll together.
 
@@ -795,7 +869,7 @@ Validation failures are `422`:
 }
 ```
 
-Read `errors` for the field. `message` on a `422` is an English sentence, not a code. On `401`, `403`, and `429`, `message` is the code in the tables above, except Laravel's `Unauthenticated.` and `Too Many Attempts.` strings. On `404`, `message` is `Not found.` or `order_unavailable`. On `409`, `message` is `invalid_status`, `order_link_limit`, `subscription_limit`, or `plan_in_use`. `subscription_limit` is the push cap. `plan_in_use` means a subscription plan still belongs to a restaurant. `subscription_inactive` is a `403`, not a `409`.
+Read `errors` for the field. `message` on a `422` is an English sentence, not a code. On `401`, `403`, and `429`, `message` is the code in the tables above, except Laravel's `Unauthenticated.` and `Too Many Attempts.` strings. On `404`, `message` is `Not found.` or `order_unavailable`. On `409`, `message` is `invalid_status`, `already_reviewed`, `order_link_limit`, `subscription_limit`, or `plan_in_use`. `subscription_limit` is the push cap. `plan_in_use` means a subscription plan still belongs to a restaurant. `subscription_inactive` is a `403`, not a `409`.
 
 ## Order
 
