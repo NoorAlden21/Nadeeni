@@ -40,6 +40,7 @@ class UpdateRestaurantRequest extends FormRequest
             'order_ttl_minutes' => ['sometimes', 'required', 'integer', 'min:1', 'max:65535'],
             'is_active' => ['sometimes', 'required', 'boolean'],
             'plan_id' => ['sometimes', 'required', 'integer', Rule::exists('subscription_plans', 'id')->where('is_active', true)],
+            'icon' => ['sometimes', 'file', 'mimes:jpeg,png,webp', 'max:1024'],
         ];
     }
 }

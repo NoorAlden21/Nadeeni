@@ -193,6 +193,7 @@ Store order status as a string plus a check constraint. Avoid a native PostgreSQ
 - `timezone` — default `Asia/Damascus`
 - `order_ttl_minutes` — default `240`
 - `is_active` — default true. Inactive restaurants reject new orders and public registration.
+- `icon` — optional JPEG, PNG, or WebP, at most 1 MB, stored on the restaurant. Public pages use `icon_url`. The file is not kept on disk, because the Render disk does not survive a deploy.
 - `subscription_plan_id` — nullable FK to `subscription_plans`. Restricts delete of a plan that is still assigned.
 - `subscription_starts_at`, `subscription_ends_at` — the current granted period. Access continues until `subscription_ends_at`. A missing or past end blocks login, cashier and owner routes, and the public restaurant page.
 - `created_at`, `updated_at`

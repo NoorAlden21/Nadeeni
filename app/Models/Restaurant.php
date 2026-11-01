@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
@@ -30,6 +31,15 @@ class Restaurant extends Model
         'subscription_plan_id',
         'subscription_starts_at',
         'subscription_ends_at',
+        'icon',
+        'icon_mime',
+    ];
+
+    /**
+     * @var list<string>
+     */
+    protected $hidden = [
+        'icon',
     ];
 
     /**
@@ -62,6 +72,42 @@ class Restaurant extends Model
     {
         return $this->subscription_ends_at instanceof Carbon
             && $this->subscription_ends_at->greaterThan(now());
+    }
+
+    public function storeIcon(UploadedFile $file): void
+    {
+        $path = $file->getRealPath();
+        $contents = is_string($path) ? file_get_contents($path) : false;
+        $mime = $file->getMimeType();
+
+        if ($contents === false || ! is_string($mime)) {
+            throw new \RuntimeException('The restaurant icon could not be read.');
+        }
+
+        $this->forceFill([
+            'icon' => base64_encode($contents),
+            'icon_mime' => $mime,
+        ])->save();
+    }
+
+    public function iconBytes(): ?string
+    {
+        if (! is_string($this->icon) || $this->icon === '') {
+            return null;
+        }
+
+        $decoded = base64_decode($this->icon, true);
+
+        return is_string($decoded) ? $decoded : null;
+    }
+
+    public function iconUrl(): ?string
+    {
+        if ($this->icon === null) {
+            return null;
+        }
+
+        return url('/api/public/restaurants/'.$this->slug.'/icon').'?v='.substr(sha1((string) $this->icon), 0, 12);
     }
 
     public function grant(SubscriptionPlan $plan): void

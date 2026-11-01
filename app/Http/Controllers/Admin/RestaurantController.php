@@ -14,6 +14,7 @@ use App\Models\Restaurant;
 use App\Models\SubscriptionPlan;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
 
@@ -34,11 +35,17 @@ class RestaurantController extends Controller
                 'timezone' => 'Asia/Damascus',
                 'order_ttl_minutes' => 240,
                 'is_active' => true,
-            ], $request->safe()->except('plan_id')));
+            ], $request->safe()->except(['plan_id', 'icon'])));
 
             $restaurant->grant(
                 SubscriptionPlan::query()->findOrFail($request->integer('plan_id'))
             );
+
+            $icon = $request->file('icon');
+
+            if ($icon instanceof UploadedFile) {
+                $restaurant->storeIcon($icon);
+            }
 
             return $restaurant->load('subscriptionPlan');
         });
@@ -50,12 +57,18 @@ class RestaurantController extends Controller
 
     public function update(UpdateRestaurantRequest $request, Restaurant $restaurant): RestaurantResource
     {
-        $restaurant->update($request->safe()->except('plan_id'));
+        $restaurant->update($request->safe()->except(['plan_id', 'icon']));
 
         if ($request->exists('plan_id')) {
             $restaurant->grant(
                 SubscriptionPlan::query()->findOrFail($request->integer('plan_id'))
             );
+        }
+
+        $icon = $request->file('icon');
+
+        if ($icon instanceof UploadedFile) {
+            $restaurant->storeIcon($icon);
         }
 
         return new RestaurantResource($restaurant->load('subscriptionPlan'));

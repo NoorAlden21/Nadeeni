@@ -17,6 +17,7 @@ Route::post('/auth/login', [AuthController::class, 'login'])
 
 Route::prefix('public')->group(function () {
     Route::get('/restaurants/{slug}', [PublicRestaurantController::class, 'show']);
+    Route::get('/restaurants/{slug}/icon', [PublicRestaurantController::class, 'icon']);
     Route::post('/restaurants/{slug}/register', [PublicRestaurantController::class, 'register'])
         ->middleware('throttle:register');
     Route::get('/orders/{token}', [PublicOrderController::class, 'show'])

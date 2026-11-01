@@ -231,6 +231,7 @@ These routes require a bearer token for a user with `is_platform_admin: true`. A
     "timezone": "Asia/Damascus",
     "order_ttl_minutes": 240,
     "is_active": true,
+    "icon_url": null,
     "subscription": {
       "plan_id": 1,
       "plan_name": "Monthly",
@@ -264,14 +265,15 @@ These routes require a bearer token for a user with `is_platform_admin: true`. A
 | `order_ttl_minutes` | Optional. Integer from 1 to 65535. Default `240`. |
 | `is_active` | Optional. Boolean. Default `true`. |
 | `plan_id` | Required. Id of an active subscription plan. |
+| `icon` | Optional. A JPEG, PNG, or WebP file, at most 1 MB. |
 
-`201` is the created [Restaurant](#restaurant).
+`201` is the created [Restaurant](#restaurant). `icon_url` is `null` when no icon was sent.
 
-A missing `plan_id`, or an inactive plan, is `422`.
+To upload an icon, send `multipart/form-data` instead of JSON. The other fields stay form fields. A missing `plan_id`, an inactive plan, or a file that is not a JPEG, PNG, or WebP is `422`.
 
 ### `PATCH /admin/restaurants/{id}`
 
-Send only the fields that change. The same rules as create apply, except `plan_id` is optional here. Sending `plan_id` grants that plan. `{id}` is the restaurant `id` from the list or create response.
+Send only the fields that change. The same rules as create apply, except `plan_id` is optional here. Sending `plan_id` grants that plan. Sending `icon` as `multipart/form-data` replaces the icon. `{id}` is the restaurant `id` from the list or create response.
 
 `200` is the updated [Restaurant](#restaurant).
 
@@ -567,9 +569,12 @@ A missing restaurant, an inactive restaurant, or a restaurant with no current su
 
 ```json
 {
-  "name": "Shawarma House"
+  "name": "Shawarma House",
+  "icon_url": null
 }
 ```
+
+`icon_url` is an absolute URL when the restaurant has an icon, and `null` when it does not. Use it as an image address. The image itself is `GET /public/restaurants/{slug}/icon`. That response is the file bytes, not JSON. A restaurant with no icon is `404`.
 
 `{slug}` is the restaurant slug. Letter case in the URL does not matter.
 
@@ -725,6 +730,7 @@ Show the notification from `restaurant_name` and `message`. A click opens `url`.
     "slug": "shawarma-house",
     "preferred_qr_mode": "shared",
     "timezone": "Asia/Damascus",
+    "icon_url": null,
     "subscription_ends_at": "2026-12-01T12:00:00.000000Z",
     "subscription_is_current": true
   }
@@ -760,6 +766,7 @@ Show the notification from `restaurant_name` and `message`. A click opens `url`.
   "timezone": "Asia/Damascus",
   "order_ttl_minutes": 240,
   "is_active": true,
+  "icon_url": null,
   "subscription": {
     "plan_id": 1,
     "plan_name": "Monthly",

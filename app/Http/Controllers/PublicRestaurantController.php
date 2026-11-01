@@ -7,6 +7,7 @@ use App\Models\Restaurant;
 use App\Services\OrderService;
 use App\Support\FrontendUrl;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Response;
 use Illuminate\Support\Str;
 
 class PublicRestaurantController extends Controller
@@ -23,6 +24,25 @@ class PublicRestaurantController extends Controller
 
         return response()->json([
             'name' => $restaurant->name,
+            'icon_url' => $restaurant->iconUrl(),
+        ]);
+    }
+
+    public function icon(string $slug): Response
+    {
+        $restaurant = Restaurant::query()
+            ->where('slug', Str::lower($slug))
+            ->first();
+
+        $bytes = $restaurant?->iconBytes();
+
+        if ($restaurant === null || $bytes === null || $restaurant->icon_mime === null) {
+            abort(404);
+        }
+
+        return response($bytes, 200, [
+            'Content-Type' => $restaurant->icon_mime,
+            'Cache-Control' => 'public, max-age=86400',
         ]);
     }
 

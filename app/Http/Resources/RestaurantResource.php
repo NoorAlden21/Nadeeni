@@ -22,6 +22,7 @@ class RestaurantResource extends JsonResource
             'timezone' => $this->timezone,
             'order_ttl_minutes' => $this->order_ttl_minutes,
             'is_active' => $this->is_active,
+            'icon_url' => $this->iconUrl(),
             'subscription' => $this->subscriptionPayload(),
         ];
     }

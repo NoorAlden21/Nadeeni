@@ -7,6 +7,7 @@ use App\Models\Restaurant;
 use App\Models\SubscriptionPlan;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -113,5 +114,54 @@ class AdminRestaurantTest extends TestCase
             'password' => 'cashier-password',
         ])->assertUnprocessable()
             ->assertJsonValidationErrors(['email']);
+    }
+
+    public function test_an_admin_can_upload_a_restaurant_icon(): void
+    {
+        Sanctum::actingAs(User::factory()->platformAdmin()->create());
+        $plan = SubscriptionPlan::factory()->create();
+
+        $created = $this->post('/api/admin/restaurants', [
+            'name' => 'Shawarma House',
+            'slug' => 'shawarma-house',
+            'plan_id' => $plan->id,
+            'icon' => UploadedFile::fake()->image('icon.png', 64, 64),
+        ], ['Accept' => 'application/json']);
+
+        $created->assertCreated();
+        $iconUrl = $created->json('icon_url');
+        $this->assertIsString($iconUrl);
+        $this->assertStringContainsString('/api/public/restaurants/shawarma-house/icon?v=', $iconUrl);
+
+        $this->get('/api/public/restaurants/shawarma-house/icon')
+            ->assertOk()
+            ->assertHeader('content-type', 'image/png');
+
+        $this->getJson('/api/public/restaurants/shawarma-house')
+            ->assertOk()
+            ->assertJsonPath('name', 'Shawarma House')
+            ->assertJsonPath('icon_url', $iconUrl);
+
+        $replaced = $this->patch('/api/admin/restaurants/'.$created->json('id'), [
+            'icon' => UploadedFile::fake()->image('next.jpg', 32, 32),
+        ], ['Accept' => 'application/json']);
+
+        $replaced->assertOk();
+        $this->assertNotSame($iconUrl, $replaced->json('icon_url'));
+
+        $this->get('/api/public/restaurants/shawarma-house/icon')
+            ->assertOk()
+            ->assertHeader('content-type', 'image/jpeg');
+
+        $this->post('/api/admin/restaurants', [
+            'name' => 'Bad',
+            'slug' => 'bad-icon',
+            'plan_id' => $plan->id,
+            'icon' => UploadedFile::fake()->create('notes.pdf', 20, 'application/pdf'),
+        ], ['Accept' => 'application/json'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['icon']);
+
+        $this->get('/api/public/restaurants/missing/icon')->assertNotFound();
     }
 }

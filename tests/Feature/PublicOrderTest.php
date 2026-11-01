@@ -37,7 +37,10 @@ class PublicOrderTest extends TestCase
 
         $this->getJson('/api/public/restaurants/Shawarma-House')
             ->assertOk()
-            ->assertExactJson(['name' => 'Shawarma House']);
+            ->assertExactJson([
+                'name' => 'Shawarma House',
+                'icon_url' => null,
+            ]);
 
         $missing = $this->getJson('/api/public/restaurants/missing');
         $inactive = $this->getJson('/api/public/restaurants/closed-grill');
