@@ -153,6 +153,17 @@ class AdminRestaurantTest extends TestCase
             ->assertOk()
             ->assertHeader('content-type', 'image/jpeg');
 
+        $svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><circle cx="5" cy="5" r="4" fill="#4a0418"/></svg>';
+        $svgIcon = $this->patch('/api/admin/restaurants/'.$created->json('id'), [
+            'icon' => UploadedFile::fake()->createWithContent('logo.svg', $svg),
+        ], ['Accept' => 'application/json']);
+
+        $svgIcon->assertOk();
+        $this->get('/api/public/restaurants/shawarma-house/icon')
+            ->assertOk()
+            ->assertHeader('content-type', 'image/svg+xml')
+            ->assertSee('<svg', false);
+
         $this->post('/api/admin/restaurants', [
             'name' => 'Bad',
             'slug' => 'bad-icon',

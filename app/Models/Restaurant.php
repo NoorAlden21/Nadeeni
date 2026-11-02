@@ -79,9 +79,14 @@ class Restaurant extends Model
         $path = $file->getRealPath();
         $contents = is_string($path) ? file_get_contents($path) : false;
         $mime = $file->getMimeType();
+        $extension = strtolower($file->getClientOriginalExtension());
 
         if ($contents === false || ! is_string($mime)) {
             throw new \RuntimeException('The restaurant icon could not be read.');
+        }
+
+        if ($extension === 'svg' || $mime === 'image/svg' || $mime === 'image/svg+xml') {
+            $mime = 'image/svg+xml';
         }
 
         $this->forceFill([

@@ -40,10 +40,17 @@ class PublicRestaurantController extends Controller
             abort(404);
         }
 
-        return response($bytes, 200, [
+        $headers = [
             'Content-Type' => $restaurant->icon_mime,
             'Cache-Control' => 'public, max-age=86400',
-        ]);
+            'X-Content-Type-Options' => 'nosniff',
+        ];
+
+        if ($restaurant->icon_mime === 'image/svg+xml') {
+            $headers['Content-Security-Policy'] = "default-src 'none'; style-src 'unsafe-inline'; sandbox";
+        }
+
+        return response($bytes, 200, $headers);
     }
 
     public function register(RegisterOrderRequest $request, string $slug): JsonResponse
