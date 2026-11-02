@@ -43,6 +43,7 @@ class RestaurantStats
                 'orders' => (int) ($row->orders ?? 0),
                 'ready_orders' => (int) ($row->ready_orders ?? 0),
                 'cancelled_orders' => (int) ($row->cancelled_orders ?? 0),
+                'uncollected_orders' => (int) ($row->uncollected_orders ?? 0),
                 'average_ready_seconds' => $this->seconds($row->average_ready_seconds ?? null, (int) ($row->ready_orders ?? 0)),
                 'longest_ready_seconds' => $this->seconds($row->longest_ready_seconds ?? null, (int) ($row->ready_orders ?? 0)),
                 'orders_without_browser' => (int) ($row->orders_without_browser ?? 0),
@@ -62,6 +63,7 @@ class RestaurantStats
             'orders' => (int) $totals->orders,
             'ready_orders' => (int) $totals->ready_orders,
             'cancelled_orders' => (int) $totals->cancelled_orders,
+            'uncollected_orders' => (int) $totals->uncollected_orders,
             'average_ready_seconds' => $this->seconds($totals->average_ready_seconds, (int) $totals->ready_orders),
             'longest_ready_seconds' => $this->seconds($totals->longest_ready_seconds, (int) $totals->ready_orders),
             'orders_without_browser' => (int) $totals->orders_without_browser,
@@ -80,6 +82,7 @@ class RestaurantStats
             ->selectRaw('COUNT(*) as orders')
             ->selectRaw('SUM(CASE WHEN orders.ready_at IS NOT NULL THEN 1 ELSE 0 END) as ready_orders')
             ->selectRaw("SUM(CASE WHEN orders.status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_orders")
+            ->selectRaw("SUM(CASE WHEN orders.status = 'uncollected' THEN 1 ELSE 0 END) as uncollected_orders")
             ->selectRaw('AVG(CASE WHEN orders.ready_at IS NOT NULL THEN '.$this->readySecondsSql().' END) as average_ready_seconds')
             ->selectRaw('MAX(CASE WHEN orders.ready_at IS NOT NULL THEN '.$this->readySecondsSql().' END) as longest_ready_seconds')
             ->selectRaw('SUM(CASE WHEN orders.visitor_id IS NULL THEN 1 ELSE 0 END) as orders_without_browser')
@@ -101,6 +104,7 @@ class RestaurantStats
             ->selectRaw('COUNT(*) as orders')
             ->selectRaw('SUM(CASE WHEN orders.ready_at IS NOT NULL THEN 1 ELSE 0 END) as ready_orders')
             ->selectRaw("SUM(CASE WHEN orders.status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_orders")
+            ->selectRaw("SUM(CASE WHEN orders.status = 'uncollected' THEN 1 ELSE 0 END) as uncollected_orders")
             ->selectRaw('AVG(CASE WHEN orders.ready_at IS NOT NULL THEN '.$this->readySecondsSql().' END) as average_ready_seconds')
             ->selectRaw('MAX(CASE WHEN orders.ready_at IS NOT NULL THEN '.$this->readySecondsSql().' END) as longest_ready_seconds')
             ->selectRaw('SUM(CASE WHEN orders.visitor_id IS NULL THEN 1 ELSE 0 END) as orders_without_browser')

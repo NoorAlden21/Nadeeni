@@ -13,4 +13,5 @@ enum OrderEventType: string
     case Collected = 'collected';
     case Cancelled = 'cancelled';
     case Expired = 'expired';
+    case Uncollected = 'uncollected';
 }

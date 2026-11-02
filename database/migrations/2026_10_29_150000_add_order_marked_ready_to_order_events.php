@@ -27,7 +27,8 @@ return new class extends Migration
                 'notification_resent',
                 'collected',
                 'cancelled',
-                'expired'
+                'expired',
+                'uncollected'
             ]::text[]))
         SQL);
     }

@@ -140,7 +140,7 @@ class PublicOrderTest extends TestCase
         $this->register('shawarma-house', '0047')->assertExactJson($unknown->json());
         $this->assertSame(OrderStatus::Waiting, $order->refresh()->status);
 
-        foreach ([OrderStatus::Collected, OrderStatus::Cancelled, OrderStatus::Expired] as $status) {
+        foreach ([OrderStatus::Collected, OrderStatus::Cancelled, OrderStatus::Expired, OrderStatus::Uncollected] as $status) {
             $number = '10'.$status->value;
             [, $closedCashier, $closed] = $this->placeOrder($number, $restaurant);
             app(OrderService::class)->collect($closed, $closedCashier);

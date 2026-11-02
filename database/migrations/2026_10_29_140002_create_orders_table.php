@@ -16,7 +16,7 @@ return new class extends Migration
             $table->uuid('id')->primary();
             $table->foreignId('restaurant_id')->constrained()->restrictOnDelete();
             $table->string('order_number', 32);
-            $table->enum('status', ['waiting', 'ready', 'collected', 'cancelled', 'expired'])->default('waiting');
+            $table->enum('status', ['waiting', 'ready', 'collected', 'cancelled', 'expired', 'uncollected'])->default('waiting');
             $table->foreignId('created_by_user_id')->nullable()->constrained('users')->nullOnDelete();
             $table->uuid('visitor_id')->nullable();
             $table->timestampTz('expires_at');
@@ -24,6 +24,7 @@ return new class extends Migration
             $table->timestampTz('collected_at')->nullable();
             $table->timestampTz('cancelled_at')->nullable();
             $table->timestampTz('expired_at')->nullable();
+            $table->timestampTz('uncollected_at')->nullable();
             $table->timestampsTz();
 
             $table->index(['restaurant_id', 'status', 'created_at']);

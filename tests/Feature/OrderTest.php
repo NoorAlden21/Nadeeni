@@ -463,6 +463,48 @@ class OrderTest extends TestCase
             ->assertJsonValidationErrors(['order_number']);
     }
 
+    public function test_a_cashier_can_mark_a_ready_order_uncollected(): void
+    {
+        $cashier = $this->actingCashier();
+
+        $waiting = $this->postJson('/api/orders', ['order_number' => '0047'])->assertCreated()->json('id');
+
+        $this->postJson('/api/orders/'.$waiting.'/uncollect')
+            ->assertStatus(409)
+            ->assertJsonPath('message', 'invalid_status');
+
+        $this->postJson('/api/orders/'.$waiting.'/notify')->assertOk();
+        $readyAt = $this->getJson('/api/orders/'.$waiting)->json('ready_at');
+
+        $this->postJson('/api/orders/'.$waiting.'/uncollect')
+            ->assertOk()
+            ->assertJsonPath('status', OrderStatus::Uncollected->value)
+            ->assertJsonPath('ready_at', $readyAt)
+            ->assertJsonMissingPath('cashier_qr');
+
+        $order = Order::query()->find($waiting);
+        $this->assertNotNull($order->uncollected_at);
+        $this->assertSame($readyAt, $order->ready_at?->toISOString());
+        $this->assertDatabaseHas('order_events', [
+            'order_id' => $waiting,
+            'event_type' => OrderEventType::Uncollected->value,
+            'actor_user_id' => $cashier->id,
+        ]);
+
+        $this->postJson('/api/orders/'.$waiting.'/collect')->assertStatus(409);
+        $this->postJson('/api/orders/'.$waiting.'/cancel')->assertStatus(409);
+
+        $this->postJson('/api/orders', ['order_number' => '0047'])
+            ->assertCreated()
+            ->assertJsonPath('status', OrderStatus::Waiting->value);
+
+        $this->postJson('/api/public/orders/'.$order->cashierQr->token.'/review', [
+            'service_rating' => 5,
+            'food_rating' => 5,
+        ])->assertStatus(409)
+            ->assertJsonPath('message', 'invalid_status');
+    }
+
     private function actingCashier(?Restaurant $restaurant = null): User
     {
         $restaurant ??= Restaurant::factory()->create();

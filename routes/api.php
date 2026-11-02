@@ -71,6 +71,7 @@ Route::middleware('auth:sanctum')->group(function () {
             ->whereUuid('order');
         Route::post('/orders/{order}/collect', [OrderController::class, 'collect'])->whereUuid('order');
         Route::post('/orders/{order}/cancel', [OrderController::class, 'cancel'])->whereUuid('order');
+        Route::post('/orders/{order}/uncollect', [OrderController::class, 'uncollect'])->whereUuid('order');
         Route::get('/restaurant/shared-qr', SharedQrController::class);
     });
 

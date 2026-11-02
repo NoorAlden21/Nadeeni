@@ -25,6 +25,7 @@ return new class extends Migration
                 'collected',
                 'cancelled',
                 'expired',
+                'uncollected',
             ]);
             $table->jsonb('metadata')->nullable();
             $table->timestampTz('created_at')->useCurrent();

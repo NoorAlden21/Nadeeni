@@ -373,9 +373,9 @@ The API uses the restaurant on the token. A `restaurant_id` in the body is ignor
 
 ### `GET /orders`
 
-Default, with no query, is `waiting` and `ready`, newest first. Pass `status` to ask for one status: `waiting`, `ready`, `collected`, `cancelled`, or `expired`.
+Default, with no query, is `waiting` and `ready`, newest first. Pass `status` to ask for one status: `waiting`, `ready`, `collected`, `cancelled`, `expired`, or `uncollected`.
 
-`collected`, `cancelled`, and `expired` include only orders updated within that restaurant's `order_ttl_minutes` (default 240). `waiting` and `ready` stay in the list until they leave those statuses.
+`collected`, `cancelled`, `expired`, and `uncollected` include only orders updated within that restaurant's `order_ttl_minutes` (default 240). `waiting` and `ready` stay in the list until they leave those statuses.
 
 `200` is a JSON array. Each item is an [Order](#order) without `cashier_qr`. The list never includes the QR token.
 
@@ -403,6 +403,7 @@ An unknown `status` is `422`.
   "collected_at": null,
   "cancelled_at": null,
   "expired_at": null,
+  "uncollected_at": null,
   "created_at": "2026-10-29T12:00:00.000000Z",
   "updated_at": "2026-10-29T12:00:00.000000Z",
   "cashier_qr": {
@@ -442,7 +443,7 @@ Sending the number the order already has is `200` and changes nothing.
 
 If another `waiting` or `ready` order at this restaurant already has that number, the response is `422` and `errors.order_number` is `An active order with this number already exists.`
 
-`collected`, `cancelled`, and `expired` return `409` and `{ "message": "invalid_status" }`.
+`collected`, `cancelled`, `expired`, and `uncollected` return `409` and `{ "message": "invalid_status" }`.
 
 ### `POST /orders/{order}/notify`
 
@@ -486,12 +487,21 @@ Allowed from `waiting` or `ready`. `200` is the [Order](#order) with `status` `c
   "collected_at": null,
   "cancelled_at": "2026-10-29T12:10:00.000000Z",
   "expired_at": null,
+  "uncollected_at": null,
   "created_at": "2026-10-29T12:00:00.000000Z",
   "updated_at": "2026-10-29T12:10:00.000000Z"
 }
 ```
 
-`collected`, `cancelled`, and `expired` are final. Notify, resend, collect, cancel, and a number change on those statuses return `409` and `{ "message": "invalid_status" }`.
+### `POST /orders/{order}/uncollect`
+
+No body. Allowed only from `ready`. This is a ready order the customer did not pick up. It is not a cancellation.
+
+`200` is the [Order](#order) with `status` `uncollected` and `uncollected_at` set. `ready_at` stays as it was. The number can be used on a new order after this.
+
+`waiting`, `collected`, `cancelled`, `expired`, and `uncollected` return `409` and `{ "message": "invalid_status" }`.
+
+`collected`, `cancelled`, `expired`, and `uncollected` are final. Notify, resend, collect, cancel, uncollect, and a number change on those statuses return `409` and `{ "message": "invalid_status" }`.
 
 ### `GET /restaurant/shared-qr`
 
@@ -525,6 +535,7 @@ The API uses the restaurant on the token.
   "orders": 4,
   "ready_orders": 3,
   "cancelled_orders": 1,
+  "uncollected_orders": 1,
   "average_ready_seconds": 400,
   "longest_ready_seconds": 600,
   "orders_without_browser": 1,
@@ -538,6 +549,7 @@ The API uses the restaurant on the token.
       "orders": 4,
       "ready_orders": 3,
       "cancelled_orders": 1,
+  "uncollected_orders": 1,
       "average_ready_seconds": 400,
       "longest_ready_seconds": 600,
       "orders_without_browser": 1,
@@ -550,7 +562,7 @@ The API uses the restaurant on the token.
 }
 ```
 
-`orders` counts orders created in the window. `ready_orders` is how many of those have `ready_at`. `cancelled_orders` is how many of those now have status `cancelled`. `average_ready_seconds` is the average of `ready_at - created_at` for the ready subset, or `null` when none became ready. `longest_ready_seconds` is the largest of those same durations, or `null` when none became ready. `average_service_rating` and `average_food_rating` average the reviews on orders created in the window. Each is `null` when that window or day has no review. A review uses one decimal, so `4.5` stays `4.5`. `days` includes every date from `from` through `to`, including dates with zero orders. On those dates the ready-time fields and both rating averages are `null`.
+`orders` counts orders created in the window. `ready_orders` is how many of those have `ready_at`. `cancelled_orders` is how many of those now have status `cancelled`. `uncollected_orders` is how many were `ready` and then marked not picked up. `average_ready_seconds` is the average of `ready_at - created_at` for the ready subset, or `null` when none became ready. `longest_ready_seconds` is the largest of those same durations, or `null` when none became ready. `average_service_rating` and `average_food_rating` average the reviews on orders created in the window. Each is `null` when that window or day has no review. A review uses one decimal, so `4.5` stays `4.5`. `days` includes every date from `from` through `to`, including dates with zero orders. On those dates the ready-time fields and both rating averages are `null`.
 
 `new_browsers` and `returning_browsers` are distinct browsers that opened a page in the window. A browser is new when its first order at this restaurant is inside the window. The same browser is returning when it already had an earlier order there. `orders_without_browser` never sent an id, so leave those out of the new/returning percentage. Daily browser numbers use that rule for each day, so the days will not add up to the range totals.
 
@@ -644,7 +656,7 @@ Send `order_number` as a string. The API trims spaces and keeps leading zeros an
 
 Open `url`, or build `{your origin}/o/{token}`. The token is returned on this response only.
 
-Unknown, not-yet-entered, expired, collected, cancelled, and another restaurant's number all return `404` and `{ "message": "order_unavailable" }`. Use that same sentence in the UI for every one of those cases.
+Unknown, not-yet-entered, expired, collected, cancelled, uncollected, and another restaurant's number all return `404` and `{ "message": "order_unavailable" }`. Use that same sentence in the UI for every one of those cases.
 
 An order can have 5 open links, including the cashier QR. The next registration returns `409` and `{ "message": "order_link_limit" }`.
 
@@ -674,7 +686,7 @@ A valid id is saved when the order does not have one yet. An invalid header is i
 }
 ```
 
-`status` stays available after the order is `collected`, `cancelled`, or `expired`, so the page can show the final state. Poll every 4 seconds until one of those.
+`status` stays available after the order is `collected`, `cancelled`, `expired`, or `uncollected`, so the page can show the final state. Poll every 4 seconds until one of those.
 
 An unknown or revoked token is `404` and `{ "message": "Not found." }`.
 
@@ -711,7 +723,7 @@ No bearer token. The customer sends this when they click Send. Star taps are not
 
 `200` is the saved review, the same shape as the GET.
 
-The order must be `ready` or `collected`. `waiting`, `cancelled`, and `expired` return `409` and `{ "message": "invalid_status" }`.
+The order must be `ready` or `collected`. `waiting`, `cancelled`, `expired`, and `uncollected` return `409` and `{ "message": "invalid_status" }`.
 
 One review per order. A second Send, including from another link for that same order, returns `409` and `{ "message": "already_reviewed" }`. The first review stays.
 
@@ -883,12 +895,13 @@ Read `errors` for the field. `message` on a `422` is an English sentence, not a 
   "collected_at": null,
   "cancelled_at": null,
   "expired_at": null,
+  "uncollected_at": null,
   "created_at": "2026-10-29T12:00:00.000000Z",
   "updated_at": "2026-10-29T12:00:00.000000Z"
 }
 ```
 
-Timestamps are UTC. `status` is `waiting`, `ready`, `collected`, `cancelled`, or `expired`.
+Timestamps are UTC. `status` is `waiting`, `ready`, `collected`, `cancelled`, `expired`, or `uncollected`. `uncollected_at` is set only for `uncollected` and is otherwise `null`.
 
 `cashier_qr` is present only on create and on `GET /orders/{order}`:
 

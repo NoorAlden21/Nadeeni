@@ -32,6 +32,7 @@ class Order extends Model
         'collected_at',
         'cancelled_at',
         'expired_at',
+        'uncollected_at',
     ];
 
     /**
@@ -46,6 +47,7 @@ class Order extends Model
             'collected_at' => 'datetime',
             'cancelled_at' => 'datetime',
             'expired_at' => 'datetime',
+            'uncollected_at' => 'datetime',
         ];
     }
 

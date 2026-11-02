@@ -194,6 +194,18 @@ class OrderService
         $this->close($order, $cashier, OrderStatus::Cancelled, 'cancelled_at', OrderEventType::Cancelled);
     }
 
+    public function uncollect(Order $order, User $cashier): void
+    {
+        $this->close(
+            $order,
+            $cashier,
+            OrderStatus::Uncollected,
+            'uncollected_at',
+            OrderEventType::Uncollected,
+            [OrderStatus::Ready],
+        );
+    }
+
     public function expireDue(): int
     {
         $expired = 0;
@@ -250,11 +262,14 @@ class OrderService
         ]);
     }
 
-    private function close(Order $order, User $cashier, OrderStatus $status, string $timestamp, OrderEventType $eventType): void
+    /**
+     * @param  list<OrderStatus>  $allowed
+     */
+    private function close(Order $order, User $cashier, OrderStatus $status, string $timestamp, OrderEventType $eventType, array $allowed = [OrderStatus::Waiting, OrderStatus::Ready]): void
     {
-        DB::transaction(function () use ($order, $cashier, $status, $timestamp, $eventType): void {
+        DB::transaction(function () use ($order, $cashier, $status, $timestamp, $eventType, $allowed): void {
             $locked = $this->lock($order);
-            $this->assertStatus($locked, [OrderStatus::Waiting, OrderStatus::Ready]);
+            $this->assertStatus($locked, $allowed);
 
             $locked->update([
                 'status' => $status,

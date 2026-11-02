@@ -156,7 +156,8 @@ Statuses:
 - `waiting` — created, being prepared. Customers may attach.
 - `ready` — cashier has notified. Customers may still open the status page.
 - `collected` — customer took the order.
-- `cancelled` — voided.
+- `cancelled` — the customer is not taking the order. The cashier records it.
+- `uncollected` — the order was `ready` and the customer did not pick it up. The cashier records it. The number is free immediately.
 - `expired` — the retention window passed.
 
 Transitions:
@@ -166,15 +167,16 @@ Transitions:
 - `waiting` → `cancelled`.
 - `ready` → `collected`.
 - `ready` → `cancelled`.
+- `ready` → `uncollected`.
 - `waiting` or `ready` → `expired` by the scheduler, or by order creation when that number must be freed before insert.
-- `collected`, `cancelled`, and `expired` are final.
+- `collected`, `cancelled`, `expired`, and `uncollected` are final.
 - Any other transition returns HTTP 409 with `message` set to `invalid_status`.
 
 **Notify** locks the order row. The first call from `waiting` sets `ready`, sets `ready_at`, writes `order_marked_ready`, and commits, then sends push. A second call sees `ready`, returns success, and does not push. The status change is kept even when every push fails. `notification_sent` is recorded only after a successful push attempt, not when the status changes. **Resend** is allowed only from `ready`, is logged as `notification_resent`, and is rate limited. It does not change status.
 
 `expires_at` is set at creation from the restaurant's `order_ttl_minutes` (default 240). A scheduled command, every minute, marks due `waiting` and `ready` orders as `expired` and writes `expired_at`. That status change is what frees the order number. A partial unique index cannot depend on `now()`, so an order past `expires_at` still holds its number until the status becomes `expired`. Order creation does that itself, in the same transaction, before inserting a reuse of the number. The cashier does not wait for the scheduler.
 
-Public registration attaches only to `waiting` or `ready` orders that have not passed `expires_at`. Unknown, collected, cancelled, and expired numbers all return the same error code, `order_unavailable`.
+Public registration attaches only to `waiting` or `ready` orders that have not passed `expires_at`. Unknown, collected, cancelled, expired, and uncollected numbers all return the same error code, `order_unavailable`.
 
 ## 6. Data model
 
@@ -232,11 +234,11 @@ No password-reset tokens in the pilot. The platform admin replaces a restaurant 
 - `id` — UUID
 - `restaurant_id` — FK, `restrictOnDelete`
 - `order_number` — string, max 32. Trimmed, case-sensitive, leading zeros preserved. Not an integer.
-- `status` — `waiting`, `ready`, `collected`, `cancelled`, `expired`
+- `status` — `waiting`, `ready`, `collected`, `cancelled`, `expired`, `uncollected`
 - `created_by_user_id` — FK, `nullOnDelete`
 - `visitor_id` — nullable UUID. The browser id sent by the customer page. The first id sticks. It is not a phone number and it is not returned by the API.
 - `expires_at`
-- `ready_at`, `collected_at`, `cancelled_at`, `expired_at` — nullable
+- `ready_at`, `collected_at`, `cancelled_at`, `expired_at`, `uncollected_at` — nullable
 - `created_at`, `updated_at`
 
 There is no token column on this table.
@@ -254,7 +256,7 @@ ON orders (restaurant_id, order_number)
 WHERE status IN ('waiting', 'ready');
 ```
 
-The same number may exist again after the earlier order is `collected`, `cancelled`, or `expired`, and may exist at the same time in another restaurant. A duplicate create returns a validation error: an active order with this number already exists. The cashier opens that order and uses **Show QR** instead of creating another one.
+The same number may exist again after the earlier order is `collected`, `cancelled`, `expired`, or `uncollected`, and may exist at the same time in another restaurant. A duplicate create returns a validation error: an active order with this number already exists. The cashier opens that order and uses **Show QR** instead of creating another one.
 
 Also index `expires_at` for rows in `waiting` or `ready`, for the scheduler.
 
@@ -310,7 +312,7 @@ At most 5 subscriptions per order. Store the keys as normal columns. Never retur
 - `id` — UUID
 - `order_id` — FK, `cascadeOnDelete`
 - `actor_user_id` — nullable FK, `nullOnDelete`. Null for customer registration and for the scheduler.
-- `event_type` — `created`, `customer_linked`, `order_marked_ready`, `notification_sent`, `notification_failed`, `notification_resent`, `collected`, `cancelled`, `expired`
+- `event_type` — `created`, `customer_linked`, `order_marked_ready`, `notification_sent`, `notification_failed`, `notification_resent`, `collected`, `cancelled`, `expired`, `uncollected`
 - `metadata` — `jsonb`, nullable. No tokens, endpoints, or keys.
 - `created_at`
 
@@ -352,7 +354,7 @@ Platform admin:
 
 Cashier, always scoped to `users.restaurant_id`:
 
-- `GET /api/orders?status=waiting` — default list is `waiting` and `ready`, newest first. `collected`, `cancelled`, and `expired` only when that status is requested. Those terminal rows are limited to orders updated within the restaurant's `order_ttl_minutes`. `waiting` and `ready` stay listed until they leave those statuses.
+- `GET /api/orders?status=waiting` — default list is `waiting` and `ready`, newest first. `collected`, `cancelled`, `expired`, and `uncollected` only when that status is requested. Those terminal rows are limited to orders updated within the restaurant's `order_ttl_minutes`. `waiting` and `ready` stay listed until they leave those statuses.
 - `POST /api/orders` — body `{ order_number }`. Response includes the cashier token and `{FRONTEND_URL}/o/{token}` so the dashboard can render the QR.
 - `GET /api/orders/{order}` — includes the same cashier QR payload. This is **Show QR**.
 - `PATCH /api/orders/{order}` — body `{ order_number }`. Corrects the number on a `waiting` or `ready` order. The QR token stays. A duplicate active number is the same validation error as create. Terminal statuses return `invalid_status`.
@@ -360,11 +362,12 @@ Cashier, always scoped to `users.restaurant_id`:
 - `POST /api/orders/{order}/resend`
 - `POST /api/orders/{order}/collect`
 - `POST /api/orders/{order}/cancel`
+- `POST /api/orders/{order}/uncollect` — only from `ready`. Records that the customer did not pick up a ready order.
 - `GET /api/restaurant/shared-qr` — returns the public URL `{FRONTEND_URL}/r/{slug}`. Next.js draws and prints the image. Laravel does not generate a QR file.
 
 Owner, always scoped to `users.restaurant_id`. A cashier or platform admin receives `403`.
 
-- `GET /api/restaurant/stats?from=YYYY-MM-DD&to=YYYY-MM-DD` — inclusive dates in the restaurant timezone. Maximum 90 days. Counts orders created in that window, how many reached ready, how many are `cancelled`, the average and the longest of `ready_at - created_at` in seconds for those ready orders, the average service rating and food rating from reviews on those orders, and the same numbers per day. `new_browsers` and `returning_browsers` count distinct `visitor_id` values. A browser is new when its first order at this restaurant is inside the window. Daily browser counts use the same rule per day, so adding the days will not equal the window totals. `orders_without_browser` counts orders that never sent an id. The response contains counts only, never the ids.
+- `GET /api/restaurant/stats?from=YYYY-MM-DD&to=YYYY-MM-DD` — inclusive dates in the restaurant timezone. Maximum 90 days. Counts orders created in that window, how many reached ready, how many are `cancelled`, how many are `uncollected`, the average and the longest of `ready_at - created_at` in seconds for those ready orders, the average service rating and food rating from reviews on those orders, and the same numbers per day. `new_browsers` and `returning_browsers` count distinct `visitor_id` values. A browser is new when its first order at this restaurant is inside the window. Daily browser counts use the same rule per day, so adding the days will not equal the window totals. `orders_without_browser` counts orders that never sent an id. The response contains counts only, never the ids.
 - `GET /api/restaurant/reviews?from=YYYY-MM-DD&to=YYYY-MM-DD` — optional inclusive dates in the restaurant timezone, maximum 90 days, matched on the review time. The response has the count, both averages, and the matching reviews newest first. Omit the dates for every review.
 
 Notify response after a duplicate click is HTTP 200 with the order and `already_notified: true`. No second push.
@@ -385,7 +388,7 @@ The VAPID public key lives in the Next.js env (`NEXT_PUBLIC_VAPID_PUBLIC_KEY`) a
 
 ### Polling
 
-Customer status page: `GET /api/public/orders/{token}` every 4 seconds until the status is `collected`, `cancelled`, or `expired`. Keep polling through `ready`, so a later collect or cancel still shows up.
+Customer status page: `GET /api/public/orders/{token}` every 4 seconds until the status is `collected`, `cancelled`, `expired`, or `uncollected`. Keep polling through `ready`, so a later collect, cancel, or uncollect still shows up.
 
 Cashier list: the same 4 second interval. The tablet that just called Notify, Resend, Collect, or Cancel updates from that response immediately.
 
@@ -535,7 +538,7 @@ Ready for a small pilot when:
 - A platform admin can create a restaurant and a cashier.
 - A cashier sees and manages only their restaurant's orders.
 - A cashier can create an order from the restaurant's own order number, and can show that order's QR again after other orders have been created.
-- The same active number cannot be created twice in one restaurant. The same number can exist in two restaurants, and can exist again after the first order is collected, cancelled, or expired.
+- The same active number cannot be created twice in one restaurant. The same number can exist in two restaurants, and can exist again after the first order is collected, cancelled, expired, or uncollected.
 - A shared-QR customer can attach to an eligible order without an account, then land on `/o/{token}`.
 - A per-order QR opens exactly that order.
 - Wrong, unknown, expired, and closed numbers return `order_unavailable`.

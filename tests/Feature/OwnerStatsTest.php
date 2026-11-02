@@ -98,7 +98,11 @@ class OwnerStatsTest extends TestCase
             'status' => OrderStatus::Cancelled,
             'cancelled_at' => Carbon::parse('2026-10-29 12:20:00', 'Asia/Damascus')->utc(),
         ]);
-        $this->place($cashier, '0004', '2026-10-29 15:00:00', 6, null);
+        $uncollected = $this->place($cashier, '0004', '2026-10-29 15:00:00', 6, null);
+        $uncollected->update([
+            'status' => OrderStatus::Uncollected,
+            'uncollected_at' => Carbon::parse('2026-10-29 15:20:00', 'Asia/Damascus')->utc(),
+        ]);
         $this->place($cashier, '0005', '2026-10-28 22:30:00', 4, self::BROWSER_C, 'UTC');
 
         $other = Restaurant::factory()->create(['slug' => 'other-grill']);
@@ -116,6 +120,7 @@ class OwnerStatsTest extends TestCase
                 'orders' => 4,
                 'ready_orders' => 3,
                 'cancelled_orders' => 1,
+                'uncollected_orders' => 1,
                 'average_ready_seconds' => 400,
                 'longest_ready_seconds' => 600,
                 'orders_without_browser' => 1,
@@ -128,6 +133,7 @@ class OwnerStatsTest extends TestCase
                     'orders' => 4,
                     'ready_orders' => 3,
                     'cancelled_orders' => 1,
+                    'uncollected_orders' => 1,
                     'average_ready_seconds' => 400,
                     'longest_ready_seconds' => 600,
                     'orders_without_browser' => 1,

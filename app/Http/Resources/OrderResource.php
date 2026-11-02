@@ -36,6 +36,7 @@ class OrderResource extends JsonResource
             'collected_at' => $this->collected_at?->toISOString(),
             'cancelled_at' => $this->cancelled_at?->toISOString(),
             'expired_at' => $this->expired_at?->toISOString(),
+            'uncollected_at' => $this->uncollected_at?->toISOString(),
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
         ];

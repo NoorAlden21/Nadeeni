@@ -107,6 +107,14 @@ class OrderController extends Controller
         return new OrderResource($model->refresh());
     }
 
+    public function uncollect(Request $request, string $order): OrderResource
+    {
+        $model = $this->findOrder($request, $order);
+        $this->orders->uncollect($model, $request->user());
+
+        return new OrderResource($model->refresh());
+    }
+
     private function findOrder(Request $request, string $orderId): Order
     {
         return Order::query()
