@@ -4,11 +4,15 @@ use App\Http\Controllers\Admin\RestaurantAccountController;
 use App\Http\Controllers\Admin\RestaurantController;
 use App\Http\Controllers\Admin\SubscriptionPlanController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\MenuCategoryController;
+use App\Http\Controllers\MenuItemController;
 use App\Http\Controllers\OrderController;
+use App\Http\Controllers\PublicMenuController;
 use App\Http\Controllers\PublicOrderController;
 use App\Http\Controllers\PublicOrderReviewController;
 use App\Http\Controllers\PublicRestaurantController;
 use App\Http\Controllers\PushSubscriptionController;
+use App\Http\Controllers\RestaurantMenuController;
 use App\Http\Controllers\RestaurantReviewController;
 use App\Http\Controllers\RestaurantStatsController;
 use App\Http\Controllers\SharedQrController;
@@ -20,6 +24,11 @@ Route::post('/auth/login', [AuthController::class, 'login'])
 Route::prefix('public')->group(function () {
     Route::get('/restaurants/{slug}', [PublicRestaurantController::class, 'show']);
     Route::get('/restaurants/{slug}/icon', [PublicRestaurantController::class, 'icon']);
+    Route::get('/restaurants/{slug}/menu', [PublicMenuController::class, 'show']);
+    Route::get('/restaurants/{slug}/menu-categories/{category}/icon', [PublicMenuController::class, 'icon'])
+        ->whereNumber('category');
+    Route::get('/restaurants/{slug}/menu-items/{item}/photo', [PublicMenuController::class, 'photo'])
+        ->whereNumber('item');
     Route::post('/restaurants/{slug}/register', [PublicRestaurantController::class, 'register'])
         ->middleware('throttle:register');
     Route::get('/orders/{token}', [PublicOrderController::class, 'show'])
@@ -73,6 +82,20 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/orders/{order}/cancel', [OrderController::class, 'cancel'])->whereUuid('order');
         Route::post('/orders/{order}/uncollect', [OrderController::class, 'uncollect'])->whereUuid('order');
         Route::get('/restaurant/shared-qr', SharedQrController::class);
+    });
+
+    Route::middleware('restaurant.staff')->group(function () {
+        Route::get('/restaurant/menu', [RestaurantMenuController::class, 'show']);
+        Route::post('/restaurant/menu/categories', [MenuCategoryController::class, 'store']);
+        Route::patch('/restaurant/menu/categories/{category}', [MenuCategoryController::class, 'update'])
+            ->whereNumber('category');
+        Route::delete('/restaurant/menu/categories/{category}', [MenuCategoryController::class, 'destroy'])
+            ->whereNumber('category');
+        Route::post('/restaurant/menu/items', [MenuItemController::class, 'store']);
+        Route::patch('/restaurant/menu/items/{item}', [MenuItemController::class, 'update'])
+            ->whereNumber('item');
+        Route::delete('/restaurant/menu/items/{item}', [MenuItemController::class, 'destroy'])
+            ->whereNumber('item');
     });
 
     Route::middleware('owner')->group(function () {

@@ -599,6 +599,100 @@ With no dates, the response covers every review for this restaurant. `from` and 
 
 A missing half of the range, a reversed range, or a range longer than 90 days is `422`.
 
+## Restaurant menu
+
+A cashier and an owner use the same routes. A platform admin receives `403` and `{ "message": "forbidden" }`. An inactive account or restaurant receives `403` and `{ "message": "inactive" }`. A restaurant with no current subscription receives `403` and `{ "message": "subscription_inactive" }`.
+
+The menu belongs to the restaurant on the token. Each restaurant writes its own categories and items. `ar` is required. `en` is optional and is `null` when the restaurant left it empty. `price` is a whole number the customer reads. The API does not charge it.
+
+Send JSON when there is no file. To upload a category icon or an item photo, send `multipart/form-data` and do not set `Content-Type` yourself. In that form, send booleans as `1` or `0`. A missing file leaves the current image in place. Use `icon_url` and `photo_url` as the image `src`. Both are absolute API addresses.
+
+### `GET /restaurant/menu`
+
+`200` is a JSON array, ordered by `sort_order`, then `id`. Inactive categories and unavailable items are included.
+
+```json
+[
+  {
+    "id": 1,
+    "name": { "ar": "مشاوي", "en": "Grill" },
+    "sort_order": 1,
+    "is_active": true,
+    "icon_url": null,
+    "items": [
+      {
+        "id": 4,
+        "category_id": 1,
+        "name": { "ar": "شاورما دجاج", "en": "Chicken shawarma" },
+        "description": { "ar": "مع ثوم", "en": null },
+        "price": 25000,
+        "sort_order": 0,
+        "is_available": true,
+        "photo_url": null
+      }
+    ]
+  }
+]
+```
+
+### `POST /restaurant/menu/categories`
+
+| Field | Rule |
+|---|---|
+| `name_ar` | Required. String, max 255. |
+| `name_en` | Optional. String, max 255. Blank becomes `null`. |
+| `sort_order` | Optional. Integer from 0 to 100000. Default `0`. |
+| `is_active` | Optional. Boolean. Default `true`. |
+| `icon` | Optional. A JPEG, PNG, WebP, or SVG file, at most 1 MB. |
+
+`201` is the category. `items` is an empty array. `icon_url` is `null` when no file was sent.
+
+A file that is not a JPEG, PNG, WebP, or SVG is `422` and `The icon must be a JPEG, PNG, WebP, or SVG file.` A file over 1 MB is `The icon must not be greater than 1024 kilobytes.`
+
+### `PATCH /restaurant/menu/categories/{id}`
+
+Send only the fields that change. The same rules as create apply. Sending `icon` replaces the icon. `{id}` is the category `id` from this restaurant.
+
+`200` is the category without `items`.
+
+`404` means that id is not a category of this restaurant.
+
+### `DELETE /restaurant/menu/categories/{id}`
+
+`200` is `{ "message": "deleted" }`.
+
+`409` and `{ "message": "category_not_empty" }` means the category still has items. Delete those items first.
+
+### `POST /restaurant/menu/items`
+
+| Field | Rule |
+|---|---|
+| `category_id` | Required. A category id of this restaurant. |
+| `name_ar` | Required. String, max 255. |
+| `name_en` | Optional. String, max 255. Blank becomes `null`. |
+| `description_ar` | Optional. String, max 500. Blank becomes `null`. |
+| `description_en` | Optional. String, max 500. Blank becomes `null`. |
+| `price` | Required. Integer from 0 to 100000000. |
+| `sort_order` | Optional. Integer from 0 to 100000. Default `0`. |
+| `is_available` | Optional. Boolean. Default `true`. |
+| `photo` | Optional. A JPEG, PNG, or WebP file, at most 1 MB. |
+
+`201` is the item. `photo_url` is `null` when no file was sent.
+
+A category from another restaurant, or an unknown category, is `422` on `category_id`. A file that is not a JPEG, PNG, or WebP is `422` and `The photo must be a JPEG, PNG, or WebP file.` A file over 1 MB is `The photo must not be greater than 1024 kilobytes.`
+
+### `PATCH /restaurant/menu/items/{id}`
+
+Send only the fields that change. The same rules as create apply. Sending `photo` replaces the photo. Sending `category_id` moves the item inside this restaurant.
+
+`200` is the item.
+
+`404` means that id is not an item of this restaurant.
+
+### `DELETE /restaurant/menu/items/{id}`
+
+`200` is `{ "message": "deleted" }`.
+
 ## Public
 
 No bearer token. Do not send `Authorization`. These responses have no cashier data, no other orders, and no internal ids.
@@ -607,7 +701,7 @@ Customer routes:
 
 | Page | Calls |
 |---|---|
-| `/r/{slug}` from the shared restaurant QR | `GET /public/restaurants/{slug}`, then `POST /public/restaurants/{slug}/register`, then open `/o/{token}` |
+| `/r/{slug}` from the shared restaurant QR | `GET /public/restaurants/{slug}`, `GET /public/restaurants/{slug}/menu`, then `POST /public/restaurants/{slug}/register`, then open `/o/{token}` |
 | `/o/{token}` from a per-order QR or from register | `GET /public/orders/{token}` every 4 seconds, and the push-subscription routes after the customer allows notifications |
 
 A missing restaurant, an inactive restaurant, or a restaurant with no current subscription is `404` and `{ "message": "Not found." }`. Treat that status as not found. Do not parse `message` to tell those cases apart. An already issued `/o/{token}` link still returns the order status.
@@ -626,6 +720,33 @@ A missing restaurant, an inactive restaurant, or a restaurant with no current su
 `icon_url` is an absolute URL when the restaurant has an icon, and `null` when it does not. Use it as an image address. The image itself is `GET /public/restaurants/{slug}/icon`. That response is the file bytes, not JSON. A restaurant with no icon is `404`.
 
 `{slug}` is the restaurant slug. Letter case in the URL does not matter.
+
+### `GET /public/restaurants/{slug}/menu`
+
+`200` is a JSON array. Only active categories that still have an available item are included. Unavailable items are left out. Order is `sort_order`, then `id`.
+
+```json
+[
+  {
+    "name": { "ar": "مشاوي", "en": "Grill" },
+    "icon_url": null,
+    "items": [
+      {
+        "name": { "ar": "شاورما دجاج", "en": "Chicken shawarma" },
+        "description": { "ar": "مع ثوم", "en": null },
+        "price": 25000,
+        "photo_url": null
+      }
+    ]
+  }
+]
+```
+
+Show `ar`. Use `en` when the customer has switched the page to English and that value is not `null`. Use `icon_url` and `photo_url` as image addresses. `null` means there is no image.
+
+The image itself is `GET /public/restaurants/{slug}/menu-categories/{id}/icon` or `GET /public/restaurants/{slug}/menu-items/{id}/photo`. Those responses are the file bytes, not JSON. A missing image is `404`. No bearer token.
+
+A missing, inactive, or unsubscribed restaurant is `404` and `{ "message": "Not found." }`.
 
 ### `POST /public/restaurants/{slug}/register`
 
@@ -881,7 +1002,7 @@ Validation failures are `422`:
 }
 ```
 
-Read `errors` for the field. `message` on a `422` is an English sentence, not a code. On `401`, `403`, and `429`, `message` is the code in the tables above, except Laravel's `Unauthenticated.` and `Too Many Attempts.` strings. On `404`, `message` is `Not found.` or `order_unavailable`. On `409`, `message` is `invalid_status`, `already_reviewed`, `order_link_limit`, `subscription_limit`, or `plan_in_use`. `subscription_limit` is the push cap. `plan_in_use` means a subscription plan still belongs to a restaurant. `subscription_inactive` is a `403`, not a `409`.
+Read `errors` for the field. `message` on a `422` is an English sentence, not a code. On `401`, `403`, and `429`, `message` is the code in the tables above, except Laravel's `Unauthenticated.` and `Too Many Attempts.` strings. On `404`, `message` is `Not found.` or `order_unavailable`. On `409`, `message` is `invalid_status`, `already_reviewed`, `order_link_limit`, `subscription_limit`, `plan_in_use`, or `category_not_empty`. `subscription_limit` is the push cap. `plan_in_use` means a subscription plan still belongs to a restaurant. `category_not_empty` means a menu category still has items. `subscription_inactive` is a `403`, not a `409`.
 
 ## Order
 

@@ -1,6 +1,7 @@
 <?php
 
 use App\Exceptions\AlreadyReviewed;
+use App\Exceptions\CategoryInUse;
 use App\Exceptions\InvalidOrderStatus;
 use App\Exceptions\OrderLinkLimit;
 use App\Exceptions\OrderUnavailable;
@@ -8,6 +9,7 @@ use App\Exceptions\SubscriptionLimit;
 use App\Http\Middleware\EnsureCashier;
 use App\Http\Middleware\EnsureOwner;
 use App\Http\Middleware\EnsurePlatformAdmin;
+use App\Http\Middleware\EnsureRestaurantStaff;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -27,16 +29,24 @@ return Application::configure(basePath: dirname(__DIR__))
             'platform.admin' => EnsurePlatformAdmin::class,
             'cashier' => EnsureCashier::class,
             'owner' => EnsureOwner::class,
+            'restaurant.staff' => EnsureRestaurantStaff::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         $exceptions->dontReport([
             AlreadyReviewed::class,
+            CategoryInUse::class,
             InvalidOrderStatus::class,
             OrderUnavailable::class,
             OrderLinkLimit::class,
             SubscriptionLimit::class,
         ]);
+
+        $exceptions->render(function (CategoryInUse $exception) {
+            return response()->json([
+                'message' => 'category_not_empty',
+            ], 409);
+        });
 
         $exceptions->render(function (AlreadyReviewed $exception) {
             return response()->json([
