@@ -605,7 +605,7 @@ A cashier and an owner use the same routes. A platform admin receives `403` and 
 
 The menu belongs to the restaurant on the token. Each restaurant writes its own categories and items. `ar` is required. `en` is optional and is `null` when the restaurant left it empty. `price` is a whole number the customer reads. The API does not charge it.
 
-Send JSON when there is no file. To upload a category icon or an item photo, send `multipart/form-data` and do not set `Content-Type` yourself. In that form, send booleans as `1` or `0`. A missing file leaves the current image in place. Use `icon_url` and `photo_url` as the image `src`. Both are absolute API addresses.
+Send JSON when there is no file. To upload a category icon, an item photo, or a banner, send `multipart/form-data` and do not set `Content-Type` yourself. In that form, send booleans as `1` or `0`. A missing file leaves the current image in place. Use `icon_url`, `photo_url`, and `image_url` as the image `src`. They are absolute API addresses.
 
 ### `GET /restaurant/menu`
 
@@ -695,6 +695,47 @@ Send only the fields that change. The same rules as create apply. Sending `photo
 
 `200` is `{ "message": "deleted" }`.
 
+### `GET /restaurant/banners`
+
+`200` is a JSON array of this restaurant's banners, including inactive ones, ordered by `sort_order`, then `id`.
+
+```json
+[
+  {
+    "id": 3,
+    "sort_order": 0,
+    "is_active": true,
+    "image_url": "https://nadeeni-api.onrender.com/api/public/restaurants/shawarma-house/banners/3/image?v=ab12cd34ef56"
+  }
+]
+```
+
+### `POST /restaurant/banners`
+
+| Field | Rule |
+|---|---|
+| `image` | Required. A JPEG, PNG, or WebP file, at most 1 MB. |
+| `sort_order` | Optional. Integer from 0 to 100000. Default `0`. |
+| `is_active` | Optional. Boolean. Default `true`. |
+
+`201` is the banner.
+
+A file that is not a JPEG, PNG, or WebP is `422` and `The image must be a JPEG, PNG, or WebP file.` A file over 1 MB is `The image must not be greater than 1024 kilobytes.`
+
+A restaurant can store 5 banners. The sixth returns `409` and `{ "message": "banner_limit" }`. Delete one before adding another. An inactive banner still counts toward the 5.
+
+### `PATCH /restaurant/banners/{id}`
+
+Send only the fields that change. The same rules as create apply, except `image` is optional. Sending `image` replaces the picture and changes `image_url`.
+
+`200` is the banner.
+
+`404` means that id is not a banner of this restaurant.
+
+### `DELETE /restaurant/banners/{id}`
+
+`200` is `{ "message": "deleted" }`.
+
 ## Public
 
 No bearer token. Do not send `Authorization`. These responses have no cashier data, no other orders, and no internal ids.
@@ -725,31 +766,40 @@ A missing restaurant, an inactive restaurant, or a restaurant with no current su
 
 ### `GET /public/restaurants/{slug}/menu`
 
-`200` is a JSON array. Only active categories that still have an available item are included. Unavailable items are left out. Order is `sort_order`, then `id`.
+`200` is one object. `banners` lists the active banners, ordered by `sort_order`, then `id`. `categories` lists only active categories that still have an available item. Unavailable items are left out. Order is `sort_order`, then `id`.
 
 ```json
-[
-  {
-    "name": { "ar": "مشاوي", "en": "Grill" },
-    "icon_url": null,
-    "items": [
-      {
-        "name": { "ar": "شاورما دجاج", "en": "Chicken shawarma" },
-        "description": { "ar": "مع ثوم", "en": null },
-        "price": 25000,
-        "badge": "offer",
-        "photo_url": null
-      }
-    ]
-  }
-]
+{
+  "banners": [
+    {
+      "image_url": "https://nadeeni-api.onrender.com/api/public/restaurants/shawarma-house/banners/3/image?v=ab12cd34ef56"
+    }
+  ],
+  "categories": [
+    {
+      "name": { "ar": "مشاوي", "en": "Grill" },
+      "icon_url": null,
+      "items": [
+        {
+          "name": { "ar": "شاورما دجاج", "en": "Chicken shawarma" },
+          "description": { "ar": "مع ثوم", "en": null },
+          "price": 25000,
+          "badge": "offer",
+          "photo_url": null
+        }
+      ]
+    }
+  ]
+}
 ```
+
+Draw `banners` at the top of the menu page. Use each `image_url` as the image `src`. The picture itself is that URL. The response is the file bytes, not JSON. A missing banner is `404`. Inactive banners are left out. There is no second request for the list.
 
 Show `ar`. Use `en` when the customer has switched the page to English and that value is not `null`. Use `icon_url` and `photo_url` as image addresses. `null` means there is no image.
 
-`badge` is `new`, `offer`, or `null`. The item stays in its category. There is no second request and no offers category. An offers tab uses the items in this response whose `badge` is `offer`. A new-items tab uses the ones whose `badge` is `new`.
+`badge` is `new`, `offer`, or `null`. The item stays in its category. There is no second request and no offers category. An offers tab uses the items in `categories` whose `badge` is `offer`. A new-items tab uses the ones whose `badge` is `new`. A banner does not replace that tab.
 
-The image itself is `GET /public/restaurants/{slug}/menu-categories/{id}/icon` or `GET /public/restaurants/{slug}/menu-items/{id}/photo`. Those responses are the file bytes, not JSON. A missing image is `404`. No bearer token.
+Category icons and item photos are `GET /public/restaurants/{slug}/menu-categories/{id}/icon` and `GET /public/restaurants/{slug}/menu-items/{id}/photo`. Those responses are the file bytes, not JSON. A missing image is `404`. No bearer token.
 
 A missing, inactive, or unsubscribed restaurant is `404` and `{ "message": "Not found." }`.
 
@@ -1007,7 +1057,7 @@ Validation failures are `422`:
 }
 ```
 
-Read `errors` for the field. `message` on a `422` is an English sentence, not a code. On `401`, `403`, and `429`, `message` is the code in the tables above, except Laravel's `Unauthenticated.` and `Too Many Attempts.` strings. On `404`, `message` is `Not found.` or `order_unavailable`. On `409`, `message` is `invalid_status`, `already_reviewed`, `order_link_limit`, `subscription_limit`, `plan_in_use`, or `category_not_empty`. `subscription_limit` is the push cap. `plan_in_use` means a subscription plan still belongs to a restaurant. `category_not_empty` means a menu category still has items. `subscription_inactive` is a `403`, not a `409`.
+Read `errors` for the field. `message` on a `422` is an English sentence, not a code. On `401`, `403`, and `429`, `message` is the code in the tables above, except Laravel's `Unauthenticated.` and `Too Many Attempts.` strings. On `404`, `message` is `Not found.` or `order_unavailable`. On `409`, `message` is `invalid_status`, `already_reviewed`, `order_link_limit`, `subscription_limit`, `plan_in_use`, `category_not_empty`, or `banner_limit`. `subscription_limit` is the push cap. `plan_in_use` means a subscription plan still belongs to a restaurant. `category_not_empty` means a menu category still has items. `banner_limit` means the restaurant already has 5 banners. `subscription_inactive` is a `403`, not a `409`.
 
 ## Order
 

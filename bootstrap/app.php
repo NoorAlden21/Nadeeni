@@ -1,6 +1,7 @@
 <?php
 
 use App\Exceptions\AlreadyReviewed;
+use App\Exceptions\BannerLimit;
 use App\Exceptions\CategoryInUse;
 use App\Exceptions\InvalidOrderStatus;
 use App\Exceptions\OrderLinkLimit;
@@ -35,12 +36,19 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withExceptions(function (Exceptions $exceptions) {
         $exceptions->dontReport([
             AlreadyReviewed::class,
+            BannerLimit::class,
             CategoryInUse::class,
             InvalidOrderStatus::class,
             OrderUnavailable::class,
             OrderLinkLimit::class,
             SubscriptionLimit::class,
         ]);
+
+        $exceptions->render(function (BannerLimit $exception) {
+            return response()->json([
+                'message' => 'banner_limit',
+            ], 409);
+        });
 
         $exceptions->render(function (CategoryInUse $exception) {
             return response()->json([

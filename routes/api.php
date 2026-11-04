@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\RestaurantAccountController;
 use App\Http\Controllers\Admin\RestaurantController;
 use App\Http\Controllers\Admin\SubscriptionPlanController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\MenuBannerController;
 use App\Http\Controllers\MenuCategoryController;
 use App\Http\Controllers\MenuItemController;
 use App\Http\Controllers\OrderController;
@@ -25,6 +26,8 @@ Route::prefix('public')->group(function () {
     Route::get('/restaurants/{slug}', [PublicRestaurantController::class, 'show']);
     Route::get('/restaurants/{slug}/icon', [PublicRestaurantController::class, 'icon']);
     Route::get('/restaurants/{slug}/menu', [PublicMenuController::class, 'show']);
+    Route::get('/restaurants/{slug}/banners/{banner}/image', [PublicMenuController::class, 'banner'])
+        ->whereNumber('banner');
     Route::get('/restaurants/{slug}/menu-categories/{category}/icon', [PublicMenuController::class, 'icon'])
         ->whereNumber('category');
     Route::get('/restaurants/{slug}/menu-items/{item}/photo', [PublicMenuController::class, 'photo'])
@@ -86,6 +89,12 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::middleware('restaurant.staff')->group(function () {
         Route::get('/restaurant/menu', [RestaurantMenuController::class, 'show']);
+        Route::get('/restaurant/banners', [MenuBannerController::class, 'index']);
+        Route::post('/restaurant/banners', [MenuBannerController::class, 'store']);
+        Route::patch('/restaurant/banners/{banner}', [MenuBannerController::class, 'update'])
+            ->whereNumber('banner');
+        Route::delete('/restaurant/banners/{banner}', [MenuBannerController::class, 'destroy'])
+            ->whereNumber('banner');
         Route::post('/restaurant/menu/categories', [MenuCategoryController::class, 'store']);
         Route::patch('/restaurant/menu/categories/{category}', [MenuCategoryController::class, 'update'])
             ->whereNumber('category');

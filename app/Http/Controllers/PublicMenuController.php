@@ -3,17 +3,17 @@
 namespace App\Http\Controllers;
 
 use App\Http\Resources\PublicMenuCategoryResource;
+use App\Models\MenuBanner;
 use App\Models\MenuCategory;
 use App\Models\MenuItem;
 use App\Models\Restaurant;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
 use Illuminate\Support\Str;
 
 class PublicMenuController extends Controller
 {
-    public function show(string $slug): AnonymousResourceCollection|JsonResponse
+    public function show(string $slug): JsonResponse
     {
         $restaurant = Restaurant::query()
             ->where('slug', Str::lower($slug))
@@ -44,7 +44,32 @@ class PublicMenuController extends Controller
             ->filter(fn (MenuCategory $category): bool => $category->items->isNotEmpty())
             ->values();
 
-        return PublicMenuCategoryResource::collection($categories);
+        $banners = MenuBanner::query()
+            ->withoutImage()
+            ->where('restaurant_id', $restaurant->id)
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->orderBy('id')
+            ->get();
+
+        $banners->each(fn (MenuBanner $banner) => $banner->setRelation('restaurant', $restaurant));
+
+        return response()->json([
+            'banners' => $banners->map(fn (MenuBanner $banner): array => [
+                'image_url' => $banner->imageUrl(),
+            ])->values(),
+            'categories' => PublicMenuCategoryResource::collection($categories)->resolve(),
+        ]);
+    }
+
+    public function banner(string $slug, int $banner): Response
+    {
+        $model = MenuBanner::query()
+            ->whereKey($banner)
+            ->whereHas('restaurant', fn ($query) => $query->where('slug', Str::lower($slug)))
+            ->first();
+
+        return $this->image($model?->imageBytes(), $model?->image_mime);
     }
 
     public function icon(string $slug, int $category): Response

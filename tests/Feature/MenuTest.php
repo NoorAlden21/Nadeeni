@@ -162,16 +162,17 @@ class MenuTest extends TestCase
         $this->assertFalse($menu[1]['items'][1]['is_available']);
 
         $public = $this->getJson('/api/public/restaurants/shawarma-house/menu')->assertOk()->json();
-        $this->assertCount(1, $public);
-        $this->assertSame('مشاوي', $public[0]['name']['ar']);
-        $this->assertSame($iconUrl, $public[0]['icon_url']);
-        $this->assertCount(1, $public[0]['items']);
-        $this->assertSame('شاورما دجاج', $public[0]['items'][0]['name']['ar']);
-        $this->assertSame(27000, $public[0]['items'][0]['price']);
-        $this->assertNull($public[0]['items'][0]['badge']);
-        $this->assertSame($photoUrl, $public[0]['items'][0]['photo_url']);
-        $this->assertArrayNotHasKey('is_active', $public[0]);
-        $this->assertArrayNotHasKey('is_available', $public[0]['items'][0]);
+        $this->assertSame([], $public['banners']);
+        $this->assertCount(1, $public['categories']);
+        $this->assertSame('مشاوي', $public['categories'][0]['name']['ar']);
+        $this->assertSame($iconUrl, $public['categories'][0]['icon_url']);
+        $this->assertCount(1, $public['categories'][0]['items']);
+        $this->assertSame('شاورما دجاج', $public['categories'][0]['items'][0]['name']['ar']);
+        $this->assertSame(27000, $public['categories'][0]['items'][0]['price']);
+        $this->assertNull($public['categories'][0]['items'][0]['badge']);
+        $this->assertSame($photoUrl, $public['categories'][0]['items'][0]['photo_url']);
+        $this->assertArrayNotHasKey('is_active', $public['categories'][0]);
+        $this->assertArrayNotHasKey('is_available', $public['categories'][0]['items'][0]);
 
         $this->deleteJson('/api/restaurant/menu/items/'.$itemId)
             ->assertOk()
