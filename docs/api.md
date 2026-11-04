@@ -628,6 +628,7 @@ Send JSON when there is no file. To upload a category icon or an item photo, sen
         "price": 25000,
         "sort_order": 0,
         "is_available": true,
+        "badge": "offer",
         "photo_url": null
       }
     ]
@@ -675,9 +676,10 @@ Send only the fields that change. The same rules as create apply. Sending `icon`
 | `price` | Required. Integer from 0 to 100000000. |
 | `sort_order` | Optional. Integer from 0 to 100000. Default `0`. |
 | `is_available` | Optional. Boolean. Default `true`. |
+| `badge` | Optional. `new`, `offer`, or `null`. Default `null`. |
 | `photo` | Optional. A JPEG, PNG, or WebP file, at most 1 MB. |
 
-`201` is the item. `photo_url` is `null` when no file was sent.
+`201` is the item. `photo_url` is `null` when no file was sent. `badge` is `null` when it was omitted. Send `null` on update to clear it. Any other value is `422`.
 
 A category from another restaurant, or an unknown category, is `422` on `category_id`. A file that is not a JPEG, PNG, or WebP is `422` and `The photo must be a JPEG, PNG, or WebP file.` A file over 1 MB is `The photo must not be greater than 1024 kilobytes.`
 
@@ -735,6 +737,7 @@ A missing restaurant, an inactive restaurant, or a restaurant with no current su
         "name": { "ar": "شاورما دجاج", "en": "Chicken shawarma" },
         "description": { "ar": "مع ثوم", "en": null },
         "price": 25000,
+        "badge": "offer",
         "photo_url": null
       }
     ]
@@ -743,6 +746,8 @@ A missing restaurant, an inactive restaurant, or a restaurant with no current su
 ```
 
 Show `ar`. Use `en` when the customer has switched the page to English and that value is not `null`. Use `icon_url` and `photo_url` as image addresses. `null` means there is no image.
+
+`badge` is `new`, `offer`, or `null`. The item stays in its category. There is no second request and no offers category. An offers tab uses the items in this response whose `badge` is `offer`. A new-items tab uses the ones whose `badge` is `new`.
 
 The image itself is `GET /public/restaurants/{slug}/menu-categories/{id}/icon` or `GET /public/restaurants/{slug}/menu-items/{id}/photo`. Those responses are the file bytes, not JSON. A missing image is `404`. No bearer token.
 

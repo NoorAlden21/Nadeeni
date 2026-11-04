@@ -24,6 +24,7 @@ class MenuItemController extends Controller
             'price' => $request->integer('price'),
             'sort_order' => $request->has('sort_order') ? $request->integer('sort_order') : 0,
             'is_available' => $request->boolean('is_available', true),
+            'badge' => $request->input('badge'),
         ]);
 
         $this->storePhoto($request, $item);

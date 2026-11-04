@@ -28,6 +28,7 @@ class MenuItemResource extends JsonResource
             'price' => $this->price,
             'sort_order' => $this->sort_order,
             'is_available' => $this->is_available,
+            'badge' => $this->badge?->value,
             'photo_url' => $this->photoUrl(),
         ];
     }

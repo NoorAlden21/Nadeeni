@@ -74,6 +74,7 @@ class MenuTest extends TestCase
             'name_en' => 'Chicken shawarma',
             'description_ar' => 'مع ثوم',
             'price' => 25000,
+            'badge' => 'offer',
             'photo' => UploadedFile::fake()->image('shawarma.jpg', 40, 40),
         ], ['Accept' => 'application/json']);
 
@@ -84,7 +85,8 @@ class MenuTest extends TestCase
             ->assertJsonPath('description.ar', 'مع ثوم')
             ->assertJsonPath('description.en', null)
             ->assertJsonPath('price', 25000)
-            ->assertJsonPath('is_available', true);
+            ->assertJsonPath('is_available', true)
+            ->assertJsonPath('badge', 'offer');
 
         $itemId = $item->json('id');
         $photoUrl = $item->json('photo_url');
@@ -99,7 +101,16 @@ class MenuTest extends TestCase
             'price' => 30000,
             'is_available' => false,
             'sort_order' => 1,
-        ])->assertCreated();
+        ])->assertCreated()
+            ->assertJsonPath('badge', null);
+
+        $this->postJson('/api/restaurant/menu/items', [
+            'category_id' => $categoryId,
+            'name_ar' => 'خطأ',
+            'price' => 1,
+            'badge' => 'sale',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['badge']);
 
         $this->postJson('/api/restaurant/menu/items', [
             'category_id' => $hidden->json('id'),
@@ -132,9 +143,11 @@ class MenuTest extends TestCase
         $this->patchJson('/api/restaurant/menu/items/'.$itemId, [
             'price' => 27000,
             'description_en' => 'With garlic',
+            'badge' => null,
         ])->assertOk()
             ->assertJsonPath('price', 27000)
             ->assertJsonPath('description.en', 'With garlic')
+            ->assertJsonPath('badge', null)
             ->assertJsonPath('photo_url', $photoUrl);
 
         $this->deleteJson('/api/restaurant/menu/categories/'.$categoryId)
@@ -155,6 +168,7 @@ class MenuTest extends TestCase
         $this->assertCount(1, $public[0]['items']);
         $this->assertSame('شاورما دجاج', $public[0]['items'][0]['name']['ar']);
         $this->assertSame(27000, $public[0]['items'][0]['price']);
+        $this->assertNull($public[0]['items'][0]['badge']);
         $this->assertSame($photoUrl, $public[0]['items'][0]['photo_url']);
         $this->assertArrayNotHasKey('is_active', $public[0]);
         $this->assertArrayNotHasKey('is_available', $public[0]['items'][0]);

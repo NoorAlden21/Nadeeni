@@ -30,6 +30,7 @@ class PublicMenuCategoryResource extends JsonResource
                     'en' => $item->description_en,
                 ],
                 'price' => $item->price,
+                'badge' => $item->badge?->value,
                 'photo_url' => $item->photoUrl(),
             ])->values(),
         ];

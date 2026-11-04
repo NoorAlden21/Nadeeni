@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\MenuItemBadge;
 use App\Support\ApiAssetUrl;
 use App\Support\StoredImage;
 use Illuminate\Database\Eloquent\Model;
@@ -23,6 +24,7 @@ class MenuItem extends Model
         'price',
         'sort_order',
         'is_available',
+        'badge',
         'photo',
         'photo_mime',
     ];
@@ -43,6 +45,7 @@ class MenuItem extends Model
             'price' => 'integer',
             'sort_order' => 'integer',
             'is_available' => 'boolean',
+            'badge' => MenuItemBadge::class,
         ];
     }
 

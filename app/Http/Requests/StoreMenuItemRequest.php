@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Enums\MenuItemBadge;
 use App\Rules\MenuPhoto;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -31,6 +32,7 @@ class StoreMenuItemRequest extends FormRequest
             'price' => ['required', 'integer', 'min:0', 'max:100000000'],
             'sort_order' => ['sometimes', 'integer', 'min:0', 'max:100000'],
             'is_available' => ['sometimes', 'boolean'],
+            'badge' => ['sometimes', 'nullable', Rule::enum(MenuItemBadge::class)],
             'photo' => ['sometimes', new MenuPhoto],
         ];
     }
