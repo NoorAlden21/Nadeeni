@@ -24,6 +24,10 @@ class SubscriptionPlan extends Model
         'price',
         'currency',
         'is_active',
+        'pager',
+        'menu',
+        'ordering',
+        'kitchen',
     ];
 
     /**
@@ -36,7 +40,23 @@ class SubscriptionPlan extends Model
             'duration_days' => 'integer',
             'price' => 'integer',
             'is_active' => 'boolean',
+            'pager' => 'boolean',
+            'menu' => 'boolean',
+            'ordering' => 'boolean',
+            'kitchen' => 'boolean',
         ];
+    }
+
+    public function copyFeaturesToRestaurants(): void
+    {
+        Restaurant::query()
+            ->where('subscription_plan_id', $this->id)
+            ->update([
+                'pager' => $this->pager,
+                'menu' => $this->menu,
+                'ordering' => $this->ordering,
+                'kitchen' => $this->kitchen,
+            ]);
     }
 
     public function restaurants(): HasMany

@@ -171,7 +171,7 @@ The API does not charge a card. The platform admin creates the plans and assigns
 
 `month` lasts one calendar month. `year` lasts one calendar year. `trial` lasts `duration_days` days. Use a trial of 7 or 14 days for the free period. `price` is a whole number in `currency`. It is a label for the admin screen. This API does not collect it.
 
-Sending `plan_id` for a restaurant that still has time left starts the new period when the current one ends. If the current period is missing or already over, the new period starts now. Changing a plan's price or duration does not change restaurants that already have it.
+Sending `plan_id` for a restaurant that still has time left starts the new period when the current one ends. If the current period is missing or already over, the new period starts now. Changing a plan's price or duration does not change restaurants that already have it. Changing `pager`, `menu`, `ordering`, or `kitchen` updates every restaurant currently on that plan. Assigning a plan copies those four flags onto the restaurant.
 
 ### `GET /admin/subscription-plans`
 
@@ -196,6 +196,10 @@ Sending `plan_id` for a restaurant that still has time left starts the new perio
 | `price` | Required. Integer from 0 to 100000000. Use `0` for a free trial. |
 | `currency` | Optional. Three letters. Default `USD`. Stored uppercase. |
 | `is_active` | Optional. Boolean. Default `true`. An inactive plan cannot be assigned. |
+| `pager` | Optional. Boolean. Default `true`. |
+| `menu` | Optional. Boolean. Default `false`. |
+| `ordering` | Optional. Boolean. Default `false`. Requires `menu`. |
+| `kitchen` | Optional. Boolean. Default `false`. |
 
 `201` is the created [Subscription plan](#subscription-plan).
 
@@ -363,7 +367,7 @@ Their bearer tokens stop working. `404` is the same as show. A platform admin ca
 
 ## Cashier
 
-These routes require a cashier bearer token. A platform admin or an owner receives `403` and `{ "message": "forbidden" }`. A cashier whose user or restaurant is inactive receives `403` and `{ "message": "inactive" }`. A restaurant with no current subscription receives `403` and `{ "message": "subscription_inactive" }`. A missing token receives `401` and `{ "message": "Unauthenticated." }`.
+These routes require a cashier bearer token. A platform admin or an owner receives `403` and `{ "message": "forbidden" }`. A cashier whose user or restaurant is inactive receives `403` and `{ "message": "inactive" }`. A restaurant with no current subscription receives `403` and `{ "message": "subscription_inactive" }`. A restaurant whose plan has `pager` set to false receives `403` and `{ "message": "feature_unavailable" }`. A missing token receives `401` and `{ "message": "Unauthenticated." }`.
 
 The API uses the restaurant on the token. A `restaurant_id` in the body is ignored.
 
@@ -601,7 +605,7 @@ A missing half of the range, a reversed range, or a range longer than 90 days is
 
 ## Restaurant menu
 
-A cashier and an owner use the same routes. A platform admin receives `403` and `{ "message": "forbidden" }`. An inactive account or restaurant receives `403` and `{ "message": "inactive" }`. A restaurant with no current subscription receives `403` and `{ "message": "subscription_inactive" }`.
+A cashier and an owner use the same routes. A platform admin receives `403` and `{ "message": "forbidden" }`. An inactive account or restaurant receives `403` and `{ "message": "inactive" }`. A restaurant with no current subscription receives `403` and `{ "message": "subscription_inactive" }`. A restaurant whose plan has `menu` set to false receives `403` and `{ "message": "feature_unavailable" }`.
 
 The menu belongs to the restaurant on the token. Each restaurant writes its own categories and items. `ar` is required. `en` is optional and is `null` when the restaurant left it empty. `price` is a whole number the customer reads. The API does not charge it.
 
@@ -756,11 +760,19 @@ A missing restaurant, an inactive restaurant, or a restaurant with no current su
 ```json
 {
   "name": "Shawarma House",
-  "icon_url": null
+  "icon_url": null,
+  "features": {
+    "pager": true,
+    "menu": true,
+    "ordering": false,
+    "kitchen": false
+  }
 }
 ```
 
 `icon_url` is an absolute URL when the restaurant has an icon, and `null` when it does not. Use it as an image address. The image itself is `GET /public/restaurants/{slug}/icon`. That response is the file bytes, not JSON. A restaurant with no icon is `404`.
+
+`features` says which parts this restaurant has. Show the menu when `menu` is true. Show the order-number field when `pager` is true. `ordering` and `kitchen` are reserved for later screens. Hide a part when its flag is false.
 
 `{slug}` is the restaurant slug. Letter case in the URL does not matter.
 
@@ -801,11 +813,11 @@ Show `ar`. Use `en` when the customer has switched the page to English and that 
 
 Category icons and item photos are `GET /public/restaurants/{slug}/menu-categories/{id}/icon` and `GET /public/restaurants/{slug}/menu-items/{id}/photo`. Those responses are the file bytes, not JSON. A missing image is `404`. No bearer token.
 
-A missing, inactive, or unsubscribed restaurant is `404` and `{ "message": "Not found." }`.
+A missing, inactive, or unsubscribed restaurant is `404` and `{ "message": "Not found." }`. The same `404` is returned when `menu` is false. Do not show an empty menu in that case.
 
 ### `POST /public/restaurants/{slug}/register`
 
-This does not create an account. The customer stays anonymous. It attaches the typed order number to a new status link.
+This does not create an account. The customer stays anonymous. It attaches the typed order number to a new status link. When `pager` is false, this route returns `404` and `{ "message": "Not found." }`. An `/o/{token}` link that was already issued still returns the order.
 
 ```json
 {
@@ -995,13 +1007,19 @@ Show the notification from `restaurant_name` and `message`. A click opens `url`.
     "preferred_qr_mode": "shared",
     "timezone": "Asia/Damascus",
     "icon_url": null,
+    "features": {
+      "pager": true,
+      "menu": false,
+      "ordering": false,
+      "kitchen": false
+    },
     "subscription_ends_at": "2026-12-01T12:00:00.000000Z",
     "subscription_is_current": true
   }
 }
 ```
 
-`restaurant` is `null` for a platform admin, and `restaurant_role` is `null` too. A restaurant user has `restaurant_role` `cashier` or `owner`. `preferred_qr_mode` is `shared` or `per_order`. It only changes what the cashier screen should emphasize. Both QR flows will exist for every restaurant. `subscription_is_current` is false when the restaurant's period is missing or over.
+`restaurant` is `null` for a platform admin, and `restaurant_role` is `null` too. A restaurant user has `restaurant_role` `cashier` or `owner`. `preferred_qr_mode` is `shared` or `per_order`. It only changes what the cashier screen should emphasize. Both QR flows will exist for every restaurant. `subscription_is_current` is false when the restaurant's period is missing or over. `features` is copied from the restaurant's plan. Hide cashier screens when `pager` is false. Hide the menu and banner screens when `menu` is false. A call to a hidden screen returns `403` and `{ "message": "feature_unavailable" }`.
 
 ### Subscription plan
 
@@ -1013,11 +1031,15 @@ Show the notification from `restaurant_name` and `message`. A click opens `url`.
   "duration_days": null,
   "price": 25,
   "currency": "USD",
-  "is_active": true
+  "is_active": true,
+  "pager": true,
+  "menu": false,
+  "ordering": false,
+  "kitchen": false
 }
 ```
 
-`interval` is `month`, `year`, or `trial`. `duration_days` is set only for `trial`.
+`interval` is `month`, `year`, or `trial`. `duration_days` is set only for `trial`. `ordering` is never true while `menu` is false. Sending that combination is `422` and `Ordering requires the menu.`
 
 ### Restaurant
 
@@ -1031,6 +1053,12 @@ Show the notification from `restaurant_name` and `message`. A click opens `url`.
   "order_ttl_minutes": 240,
   "is_active": true,
   "icon_url": null,
+  "features": {
+    "pager": true,
+    "menu": false,
+    "ordering": false,
+    "kitchen": false
+  },
   "subscription": {
     "plan_id": 1,
     "plan_name": "Monthly",
@@ -1057,7 +1085,7 @@ Validation failures are `422`:
 }
 ```
 
-Read `errors` for the field. `message` on a `422` is an English sentence, not a code. On `401`, `403`, and `429`, `message` is the code in the tables above, except Laravel's `Unauthenticated.` and `Too Many Attempts.` strings. On `404`, `message` is `Not found.` or `order_unavailable`. On `409`, `message` is `invalid_status`, `already_reviewed`, `order_link_limit`, `subscription_limit`, `plan_in_use`, `category_not_empty`, or `banner_limit`. `subscription_limit` is the push cap. `plan_in_use` means a subscription plan still belongs to a restaurant. `category_not_empty` means a menu category still has items. `banner_limit` means the restaurant already has 5 banners. `subscription_inactive` is a `403`, not a `409`.
+Read `errors` for the field. `message` on a `422` is an English sentence, not a code. On `401`, `403`, and `429`, `message` is the code in the tables above, except Laravel's `Unauthenticated.` and `Too Many Attempts.` strings. `feature_unavailable` means the restaurant's plan does not include that part. On `404`, `message` is `Not found.` or `order_unavailable`. On `409`, `message` is `invalid_status`, `already_reviewed`, `order_link_limit`, `subscription_limit`, `plan_in_use`, `category_not_empty`, or `banner_limit`. `subscription_limit` is the push cap. `plan_in_use` means a subscription plan still belongs to a restaurant. `category_not_empty` means a menu category still has items. `banner_limit` means the restaurant already has 5 banners. `subscription_inactive` is a `403`, not a `409`.
 
 ## Order
 

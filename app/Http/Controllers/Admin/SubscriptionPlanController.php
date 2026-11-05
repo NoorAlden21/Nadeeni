@@ -31,6 +31,10 @@ class SubscriptionPlanController extends Controller
             'price' => $request->integer('price'),
             'currency' => $request->input('currency', 'USD'),
             'is_active' => $request->boolean('is_active', true),
+            'pager' => $request->boolean('pager', true),
+            'menu' => $request->boolean('menu'),
+            'ordering' => $request->boolean('ordering'),
+            'kitchen' => $request->boolean('kitchen'),
         ]);
 
         return (new SubscriptionPlanResource($plan))
@@ -53,6 +57,7 @@ class SubscriptionPlanController extends Controller
         }
 
         $plan->update($data);
+        $plan->copyFeaturesToRestaurants();
 
         return new SubscriptionPlanResource($plan);
     }

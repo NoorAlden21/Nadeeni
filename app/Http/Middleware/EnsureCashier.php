@@ -32,6 +32,12 @@ class EnsureCashier
             ], 403);
         }
 
+        if (! $user->restaurant->pager) {
+            return response()->json([
+                'message' => 'feature_unavailable',
+            ], 403);
+        }
+
         return $next($request);
     }
 }

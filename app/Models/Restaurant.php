@@ -32,6 +32,10 @@ class Restaurant extends Model
         'subscription_plan_id',
         'subscription_starts_at',
         'subscription_ends_at',
+        'pager',
+        'menu',
+        'ordering',
+        'kitchen',
         'icon',
         'icon_mime',
     ];
@@ -54,6 +58,10 @@ class Restaurant extends Model
             'is_active' => 'boolean',
             'subscription_starts_at' => 'datetime',
             'subscription_ends_at' => 'datetime',
+            'pager' => 'boolean',
+            'menu' => 'boolean',
+            'ordering' => 'boolean',
+            'kitchen' => 'boolean',
         ];
     }
 
@@ -128,7 +136,24 @@ class Restaurant extends Model
             'subscription_plan_id' => $plan->id,
             'subscription_starts_at' => $start,
             'subscription_ends_at' => $plan->periodEnd($start),
+            'pager' => $plan->pager,
+            'menu' => $plan->menu,
+            'ordering' => $plan->ordering,
+            'kitchen' => $plan->kitchen,
         ])->save();
+    }
+
+    /**
+     * @return array{pager: bool, menu: bool, ordering: bool, kitchen: bool}
+     */
+    public function features(): array
+    {
+        return [
+            'pager' => $this->pager,
+            'menu' => $this->menu,
+            'ordering' => $this->ordering,
+            'kitchen' => $this->kitchen,
+        ];
     }
 
     public function users(): HasMany

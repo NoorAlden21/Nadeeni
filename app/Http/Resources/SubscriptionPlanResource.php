@@ -23,6 +23,10 @@ class SubscriptionPlanResource extends JsonResource
             'price' => $this->price,
             'currency' => $this->currency,
             'is_active' => $this->is_active,
+            'pager' => $this->pager,
+            'menu' => $this->menu,
+            'ordering' => $this->ordering,
+            'kitchen' => $this->kitchen,
         ];
     }
 }

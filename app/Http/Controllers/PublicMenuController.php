@@ -18,6 +18,7 @@ class PublicMenuController extends Controller
         $restaurant = Restaurant::query()
             ->where('slug', Str::lower($slug))
             ->where('is_active', true)
+            ->where('menu', true)
             ->where('subscription_ends_at', '>', now())
             ->first();
 

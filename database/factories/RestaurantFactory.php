@@ -43,6 +43,10 @@ class RestaurantFactory extends Factory
                     'price' => 0,
                     'currency' => 'USD',
                     'is_active' => true,
+                    'pager' => true,
+                    'menu' => true,
+                    'ordering' => false,
+                    'kitchen' => false,
                 ],
             );
 

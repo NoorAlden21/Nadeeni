@@ -23,6 +23,7 @@ class RestaurantResource extends JsonResource
             'order_ttl_minutes' => $this->order_ttl_minutes,
             'is_active' => $this->is_active,
             'icon_url' => $this->iconUrl(),
+            'features' => $this->features(),
             'subscription' => $this->subscriptionPayload(),
         ];
     }

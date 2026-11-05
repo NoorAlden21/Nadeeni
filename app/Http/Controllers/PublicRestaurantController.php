@@ -25,6 +25,7 @@ class PublicRestaurantController extends Controller
         return response()->json([
             'name' => $restaurant->name,
             'icon_url' => $restaurant->iconUrl(),
+            'features' => $restaurant->features(),
         ]);
     }
 
@@ -57,7 +58,7 @@ class PublicRestaurantController extends Controller
     {
         $restaurant = $this->activeRestaurant($slug);
 
-        if ($restaurant === null) {
+        if ($restaurant === null || ! $restaurant->pager) {
             return $this->notFound();
         }
 

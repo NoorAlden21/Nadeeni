@@ -23,6 +23,10 @@ class SubscriptionPlanFactory extends Factory
             'price' => 25,
             'currency' => 'USD',
             'is_active' => true,
+            'pager' => true,
+            'menu' => false,
+            'ordering' => false,
+            'kitchen' => false,
         ];
     }
 
