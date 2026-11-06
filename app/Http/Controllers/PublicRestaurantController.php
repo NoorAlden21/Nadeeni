@@ -25,6 +25,9 @@ class PublicRestaurantController extends Controller
         return response()->json([
             'name' => $restaurant->name,
             'icon_url' => $restaurant->iconUrl(),
+            'facebook_url' => $restaurant->facebook_url,
+            'instagram_url' => $restaurant->instagram_url,
+            'phone' => $restaurant->phone,
             'features' => $restaurant->features(),
         ]);
     }

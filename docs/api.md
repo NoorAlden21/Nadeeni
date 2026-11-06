@@ -68,7 +68,7 @@ Read `user` from the login response. Do not ask the person to pick a role.
 |---|---|---|
 | `is_platform_admin: true` | Admin | `/admin/restaurants` |
 | `restaurant_role: "cashier"` | Cashier | `/orders`, `/restaurant/shared-qr` |
-| `restaurant_role: "owner"` | Owner | `/restaurant/stats` |
+| `restaurant_role: "owner"` | Owner | `/restaurant/stats`, `/restaurant/contact` |
 | no token | Customer `/r/{slug}` and `/o/{token}` | `/public/...` |
 
 `POST /auth/login`, `POST /auth/logout`, and `GET /me` are shared by the admin, the cashier, and the owner.
@@ -236,6 +236,15 @@ These routes require a bearer token for a user with `is_platform_admin: true`. A
     "order_ttl_minutes": 240,
     "is_active": true,
     "icon_url": null,
+    "facebook_url": null,
+    "instagram_url": null,
+    "phone": null,
+    "features": {
+      "pager": true,
+      "menu": false,
+      "ordering": false,
+      "kitchen": false
+    },
     "subscription": {
       "plan_id": 1,
       "plan_name": "Monthly",
@@ -270,6 +279,9 @@ These routes require a bearer token for a user with `is_platform_admin: true`. A
 | `is_active` | Optional. Boolean. Default `true`. |
 | `plan_id` | Required. Id of an active subscription plan. |
 | `icon` | Optional. A JPEG, PNG, or WebP file, at most 1 MB. |
+| `facebook_url` | Optional. An `http` or `https` Facebook link (`facebook.com`, `fb.com`, or `fb.me`), max 255. Omit it or send `null` to leave it empty. |
+| `instagram_url` | Optional. An `http` or `https` Instagram link (`instagram.com` or `instagr.am`), max 255. Omit it or send `null` to leave it empty. |
+| `phone` | Optional. A mobile number, max 32. Digits, spaces, and `+ ( ) . -`. Omit it or send `null` to leave it empty. |
 
 `201` is the created [Restaurant](#restaurant). `icon_url` is `null` when no icon was sent.
 
@@ -277,7 +289,7 @@ To upload an icon, send `multipart/form-data` instead of JSON. The other fields 
 
 ### `PATCH /admin/restaurants/{id}`
 
-Send only the fields that change. The same rules as create apply, except `plan_id` is optional here. Sending `plan_id` grants that plan. Sending `icon` as `multipart/form-data` replaces the icon. `{id}` is the restaurant `id` from the list or create response.
+Send only the fields that change. The same rules as create apply, except `plan_id` is optional here. Sending `plan_id` grants that plan. Sending `icon` as `multipart/form-data` replaces the icon. Send `facebook_url`, `instagram_url`, or `phone` as `null` to clear that value. `{id}` is the restaurant `id` from the list or create response.
 
 `200` is the updated [Restaurant](#restaurant).
 
@@ -307,7 +319,7 @@ The new user is a cashier of that restaurant, not a platform admin.
 
 Same body and validation as creating a cashier.
 
-The new user is an owner of that restaurant. `restaurant_role` is `owner`. An owner can read stats and cannot manage orders.
+The new user is an owner of that restaurant. `restaurant_role` is `owner`. An owner can read stats and set the restaurant Facebook, Instagram, and phone. An owner cannot manage orders.
 
 ```json
 {
@@ -603,6 +615,30 @@ With no dates, the response covers every review for this restaurant. `from` and 
 
 A missing half of the range, a reversed range, or a range longer than 90 days is `422`.
 
+### `PATCH /restaurant/contact`
+
+The owner sets the Facebook link, Instagram link, and mobile phone for the restaurant on the token. A cashier or a platform admin receives `403` and `{ "message": "forbidden" }`.
+
+Send only the fields that change. A missing field stays as it is. Send `null` to clear a field.
+
+```json
+{
+  "facebook_url": "https://facebook.com/shawarmahouse",
+  "instagram_url": "https://instagram.com/shawarmahouse",
+  "phone": "+963944123456"
+}
+```
+
+| Field | Rule |
+|---|---|
+| `facebook_url` | An `http` or `https` link on `facebook.com`, `fb.com`, or `fb.me`, max 255. `null` clears it. |
+| `instagram_url` | An `http` or `https` link on `instagram.com` or `instagr.am`, max 255. `null` clears it. |
+| `phone` | A mobile number, max 32. Digits, spaces, and `+ ( ) . -`. `null` clears it. |
+
+`200` is the updated [Restaurant](#restaurant). Other fields in the body, such as `name`, are ignored.
+
+A value that is not a Facebook link, an Instagram link, or a phone number is `422`.
+
 ## Restaurant menu
 
 A cashier and an owner use the same routes. A platform admin receives `403` and `{ "message": "forbidden" }`. An inactive account or restaurant receives `403` and `{ "message": "inactive" }`. A restaurant with no current subscription receives `403` and `{ "message": "subscription_inactive" }`. A restaurant whose plan has `menu` set to false receives `403` and `{ "message": "feature_unavailable" }`.
@@ -761,6 +797,9 @@ A missing restaurant, an inactive restaurant, or a restaurant with no current su
 {
   "name": "Shawarma House",
   "icon_url": null,
+  "facebook_url": "https://facebook.com/shawarmahouse",
+  "instagram_url": null,
+  "phone": "+963944123456",
   "features": {
     "pager": true,
     "menu": true,
@@ -771,6 +810,8 @@ A missing restaurant, an inactive restaurant, or a restaurant with no current su
 ```
 
 `icon_url` is an absolute URL when the restaurant has an icon, and `null` when it does not. Use it as an image address. The image itself is `GET /public/restaurants/{slug}/icon`. That response is the file bytes, not JSON. A restaurant with no icon is `404`.
+
+`facebook_url`, `instagram_url`, and `phone` are the restaurant's public contact details. Each is `null` until an admin or an owner sets it. Show a link or a call button only when the value is not `null`.
 
 `features` says which parts this restaurant has. Show the menu when `menu` is true. Show the order-number field when `pager` is true. `ordering` and `kitchen` are reserved for later screens. Hide a part when its flag is false.
 
@@ -1007,6 +1048,9 @@ Show the notification from `restaurant_name` and `message`. A click opens `url`.
     "preferred_qr_mode": "shared",
     "timezone": "Asia/Damascus",
     "icon_url": null,
+    "facebook_url": null,
+    "instagram_url": null,
+    "phone": null,
     "features": {
       "pager": true,
       "menu": false,
@@ -1053,6 +1097,9 @@ Show the notification from `restaurant_name` and `message`. A click opens `url`.
   "order_ttl_minutes": 240,
   "is_active": true,
   "icon_url": null,
+  "facebook_url": null,
+  "instagram_url": null,
+  "phone": null,
   "features": {
     "pager": true,
     "menu": false,

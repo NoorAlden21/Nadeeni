@@ -13,6 +13,7 @@ use App\Http\Controllers\PublicOrderController;
 use App\Http\Controllers\PublicOrderReviewController;
 use App\Http\Controllers\PublicRestaurantController;
 use App\Http\Controllers\PushSubscriptionController;
+use App\Http\Controllers\RestaurantContactController;
 use App\Http\Controllers\RestaurantMenuController;
 use App\Http\Controllers\RestaurantReviewController;
 use App\Http\Controllers\RestaurantStatsController;
@@ -110,5 +111,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('owner')->group(function () {
         Route::get('/restaurant/stats', [RestaurantStatsController::class, 'show']);
         Route::get('/restaurant/reviews', [RestaurantReviewController::class, 'index']);
+        Route::patch('/restaurant/contact', [RestaurantContactController::class, 'update']);
     });
 });

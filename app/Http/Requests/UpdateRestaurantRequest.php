@@ -23,6 +23,8 @@ class UpdateRestaurantRequest extends FormRequest
                 'slug' => Str::lower(trim((string) $this->input('slug'))),
             ]);
         }
+
+        UpdateRestaurantContactRequest::prepareContact($this);
     }
 
     /**
@@ -42,6 +44,7 @@ class UpdateRestaurantRequest extends FormRequest
             'is_active' => ['sometimes', 'required', 'boolean'],
             'plan_id' => ['sometimes', 'required', 'integer', Rule::exists('subscription_plans', 'id')->where('is_active', true)],
             'icon' => ['sometimes', new RestaurantIcon],
+            ...UpdateRestaurantContactRequest::fieldRules(),
         ];
     }
 }

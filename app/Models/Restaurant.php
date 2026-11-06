@@ -38,6 +38,9 @@ class Restaurant extends Model
         'kitchen',
         'icon',
         'icon_mime',
+        'facebook_url',
+        'instagram_url',
+        'phone',
     ];
 
     /**

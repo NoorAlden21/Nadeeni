@@ -40,6 +40,9 @@ class PublicOrderTest extends TestCase
             ->assertExactJson([
                 'name' => 'Shawarma House',
                 'icon_url' => null,
+                'facebook_url' => null,
+                'instagram_url' => null,
+                'phone' => null,
                 'features' => [
                     'pager' => true,
                     'menu' => true,
